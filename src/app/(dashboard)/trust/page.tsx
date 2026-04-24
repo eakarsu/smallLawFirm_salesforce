@@ -123,8 +123,10 @@ export default function TrustAccountingPage() {
         ])
         setAccounts(accountsData)
         setTransactions(transactionsData)
-        setClients(clientsData)
-        setMatters(mattersData)
+        const clientsList = clientsData.data || clientsData
+        setClients(Array.isArray(clientsList) ? clientsList : [])
+        const mattersList = mattersData.data || mattersData
+        setMatters(Array.isArray(mattersList) ? mattersList : [])
       } catch (error) {
         console.error("Failed to fetch data:", error)
       } finally {

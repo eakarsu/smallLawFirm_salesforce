@@ -35,20 +35,42 @@ export async function GET(request: Request) {
     if (practiceAreaId && practiceAreaId !== 'all') where.practiceAreaId = practiceAreaId
     if (clientId && clientId !== 'all') where.clientId = clientId
 
-    const matters = await prisma.matter.findMany({
-      where,
-      include: {
-        client: true,
-        practiceArea: true,
-        assignments: {
-          include: { user: { select: { firstName: true, lastName: true } } },
-        },
-        _count: { select: { timeEntries: true, documents: true, deadlines: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    })
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '25')
+    const sortBy = searchParams.get('sortBy') || 'createdAt'
+    const sortOrder = searchParams.get('sortOrder') || 'desc'
 
-    return NextResponse.json(matters)
+    const allowedSortFields = ['createdAt', 'name', 'matterNumber', 'status', 'billingType']
+    const orderField = allowedSortFields.includes(sortBy) ? sortBy : 'createdAt'
+    const orderDir = sortOrder === 'asc' ? 'asc' : 'desc'
+
+    const [matters, total] = await Promise.all([
+      prisma.matter.findMany({
+        where,
+        include: {
+          client: true,
+          practiceArea: true,
+          assignments: {
+            include: { user: { select: { firstName: true, lastName: true } } },
+          },
+          _count: { select: { timeEntries: true, documents: true, deadlines: true } },
+        },
+        orderBy: { [orderField]: orderDir },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.matter.count({ where }),
+    ])
+
+    return NextResponse.json({
+      data: matters,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    })
   } catch (error) {
     console.error('Matters API error:', error)
     return NextResponse.json({ error: 'Failed to fetch matters' }, { status: 500 })

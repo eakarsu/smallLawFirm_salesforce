@@ -50,6 +50,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { formatDate } from "@/lib/utils"
+import { PageSkeleton } from "@/components/ui/skeleton"
 
 interface Deadline {
   id: string
@@ -103,7 +104,8 @@ export default function DeadlinesPage() {
           mattersRes.json(),
         ])
         setDeadlines(deadlinesData)
-        setMatters(mattersData)
+        const mattersList = mattersData.data || mattersData
+        setMatters(Array.isArray(mattersList) ? mattersList : [])
       } catch (error) {
         console.error("Failed to fetch data:", error)
       } finally {
@@ -271,6 +273,8 @@ export default function DeadlinesPage() {
     { value: "HIGH", label: "High" },
     { value: "CRITICAL", label: "Critical" },
   ]
+
+  if (loading) return <PageSkeleton />
 
   const overdue = deadlines.filter((d) => d.status !== "COMPLETED" && getDaysUntil(d.dueDate) < 0)
   const dueThisWeek = deadlines.filter(
@@ -483,11 +487,7 @@ export default function DeadlinesPage() {
       {/* Deadlines Table */}
       <Card>
         <CardContent className="p-0">
-          {loading ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="spinner" />
-            </div>
-          ) : deadlines.length === 0 ? (
+          {deadlines.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-center">
               <Calendar className="h-12 w-12 text-gray-300 mb-4" />
               <h3 className="text-lg font-medium">No deadlines found</h3>

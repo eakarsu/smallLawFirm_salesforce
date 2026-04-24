@@ -29,22 +29,44 @@ export async function GET(request: Request) {
       where.status = status
     }
 
-    const invoices = await prisma.invoice.findMany({
-      where,
-      include: {
-        matter: {
-          select: {
-            id: true,
-            name: true,
-            matterNumber: true,
-            client: { select: { id: true, firstName: true, lastName: true, companyName: true, type: true } },
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '25')
+    const sortBy = searchParams.get('sortBy') || 'createdAt'
+    const sortOrder = searchParams.get('sortOrder') || 'desc'
+
+    const allowedSortFields = ['createdAt', 'invoiceNumber', 'issueDate', 'dueDate', 'totalAmount', 'status']
+    const orderField = allowedSortFields.includes(sortBy) ? sortBy : 'createdAt'
+    const orderDir = sortOrder === 'asc' ? 'asc' : 'desc'
+
+    const [invoices, total] = await Promise.all([
+      prisma.invoice.findMany({
+        where,
+        include: {
+          matter: {
+            select: {
+              id: true,
+              name: true,
+              matterNumber: true,
+              client: { select: { id: true, firstName: true, lastName: true, companyName: true, type: true } },
+            },
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-    })
+        orderBy: { [orderField]: orderDir },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.invoice.count({ where }),
+    ])
 
-    return NextResponse.json(invoices)
+    return NextResponse.json({
+      data: invoices,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    })
   } catch (error) {
     console.error('Invoices API error:', error)
     return NextResponse.json({ error: 'Failed to fetch invoices' }, { status: 500 })

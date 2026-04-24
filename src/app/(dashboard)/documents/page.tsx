@@ -53,6 +53,7 @@ import {
   Calendar,
 } from "lucide-react"
 import { formatDate } from "@/lib/utils"
+import { PageSkeleton } from "@/components/ui/skeleton"
 
 interface Document {
   id: string
@@ -126,8 +127,10 @@ export default function DocumentsPage() {
           clientsRes.json(),
         ])
         setDocuments(docsData)
-        setMatters(mattersData)
-        setClients(clientsData)
+        const mattersList = mattersData.data || mattersData
+        setMatters(Array.isArray(mattersList) ? mattersList : [])
+        const clientsList = clientsData.data || clientsData
+        setClients(Array.isArray(clientsList) ? clientsList : [])
       } catch (error) {
         console.error("Failed to fetch data:", error)
       } finally {
@@ -251,6 +254,8 @@ export default function DocumentsPage() {
     }
     return `${client.firstName || ""} ${client.lastName || ""}`.trim() || "Unnamed"
   }
+
+  if (loading) return <PageSkeleton />
 
   const categories = [
     { value: "PLEADING", label: "Pleading" },
@@ -474,11 +479,7 @@ export default function DocumentsPage() {
       {/* Documents Table */}
       <Card>
         <CardContent className="p-0">
-          {loading ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="spinner" />
-            </div>
-          ) : documents.length === 0 ? (
+          {documents.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-center">
               <FileText className="h-12 w-12 text-gray-300 mb-4" />
               <h3 className="text-lg font-medium">No documents found</h3>

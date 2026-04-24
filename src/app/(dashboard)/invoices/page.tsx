@@ -46,6 +46,9 @@ import {
   CheckCircle,
   Clock,
 } from "lucide-react"
+import { Pagination } from "@/components/ui/pagination"
+import { SortHeader } from "@/components/ui/sort-header"
+import { PageSkeleton } from "@/components/ui/skeleton"
 import { formatCurrency, formatDate } from "@/lib/utils"
 
 interface Invoice {
@@ -88,6 +91,13 @@ interface Client {
   type: string
 }
 
+interface PaginationData {
+  page: number
+  limit: number
+  total: number
+  totalPages: number
+}
+
 export default function InvoicesPage() {
   const router = useRouter()
   const [invoices, setInvoices] = useState<Invoice[]>([])
@@ -97,6 +107,11 @@ export default function InvoicesPage() {
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(25)
+  const [pagination, setPagination] = useState<PaginationData>({ page: 1, limit: 25, total: 0, totalPages: 0 })
+  const [sortBy, setSortBy] = useState("createdAt")
+  const [sortOrder, setSortOrder] = useState("desc")
 
   const [formData, setFormData] = useState({
     clientId: "",
@@ -113,7 +128,7 @@ export default function InvoicesPage() {
       try {
         const status = statusFilter === "all" ? "" : statusFilter
         const [invoicesRes, mattersRes, clientsRes] = await Promise.all([
-          fetch(`/api/invoices?search=${search}&status=${status}`),
+          fetch(`/api/invoices?search=${search}&status=${status}&page=${page}&limit=${limit}&sortBy=${sortBy}&sortOrder=${sortOrder}`),
           fetch("/api/matters"),
           fetch("/api/clients"),
         ])
@@ -122,9 +137,10 @@ export default function InvoicesPage() {
           mattersRes.json(),
           clientsRes.json(),
         ])
-        setInvoices(invoicesData)
-        setMatters(mattersData)
-        setClients(clientsData)
+        setInvoices(invoicesData.data || invoicesData)
+        setPagination(invoicesData.pagination || { page: 1, limit: 25, total: 0, totalPages: 0 })
+        setMatters(mattersData.data || mattersData)
+        setClients(clientsData.data || clientsData)
       } catch (error) {
         console.error("Failed to fetch data:", error)
       } finally {
@@ -133,7 +149,7 @@ export default function InvoicesPage() {
     }
 
     fetchData()
-  }, [search, statusFilter])
+  }, [search, statusFilter, page, limit, sortBy, sortOrder])
 
   // Filter matters by selected client
   const filteredMatters = formData.clientId
@@ -179,11 +195,24 @@ export default function InvoicesPage() {
     try {
       await fetch(`/api/invoices/${id}/send`, { method: "POST" })
       // Refresh invoices
-      const res = await fetch(`/api/invoices?search=${search}&status=${statusFilter}`)
-      setInvoices(await res.json())
+      const status = statusFilter === "all" ? "" : statusFilter
+      const res = await fetch(`/api/invoices?search=${search}&status=${status}&page=${page}&limit=${limit}&sortBy=${sortBy}&sortOrder=${sortOrder}`)
+      const invoicesData = await res.json()
+      setInvoices(invoicesData.data || invoicesData)
+      setPagination(invoicesData.pagination || { page: 1, limit: 25, total: 0, totalPages: 0 })
     } catch (error) {
       console.error("Failed to send invoice:", error)
     }
+  }
+
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc")
+    } else {
+      setSortBy(field)
+      setSortOrder("asc")
+    }
+    setPage(1)
   }
 
   const getStatusColor = (status: string) => {
@@ -216,6 +245,8 @@ export default function InvoicesPage() {
     { total: 0, paid: 0, outstanding: 0 }
   )
 
+  if (loading) return <PageSkeleton />
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -224,13 +255,18 @@ export default function InvoicesPage() {
           <h1 className="text-3xl font-bold tracking-tight">Invoices</h1>
           <p className="text-muted-foreground">Manage client invoices and payments</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              New Invoice
-            </Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => { window.location.href = "/api/invoices/export" }}>
+            <Download className="mr-2 h-4 w-4" />
+            Export CSV
+          </Button>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                New Invoice
+              </Button>
+            </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Create New Invoice</DialogTitle>
@@ -346,6 +382,7 @@ export default function InvoicesPage() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Summary Cards */}
@@ -442,11 +479,7 @@ export default function InvoicesPage() {
       {/* Invoices Table */}
       <Card>
         <CardContent className="p-0">
-          {loading ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="spinner" />
-            </div>
-          ) : invoices.length === 0 ? (
+          {invoices.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-center">
               <FileText className="h-12 w-12 text-gray-300 mb-4" />
               <h3 className="text-lg font-medium">No invoices found</h3>
@@ -460,13 +493,13 @@ export default function InvoicesPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Invoice #</TableHead>
+                  <SortHeader label="Invoice #" field="invoiceNumber" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                   <TableHead>Client</TableHead>
                   <TableHead>Matter</TableHead>
-                  <TableHead>Issue Date</TableHead>
-                  <TableHead>Due Date</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead>Status</TableHead>
+                  <SortHeader label="Issue Date" field="issueDate" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                  <SortHeader label="Due Date" field="dueDate" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                  <SortHeader label="Amount" field="totalAmount" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} className="text-right" />
+                  <SortHeader label="Status" field="status" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                   <TableHead className="w-[70px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -535,6 +568,16 @@ export default function InvoicesPage() {
                 ))}
               </TableBody>
             </Table>
+          )}
+          {pagination.totalPages > 0 && (
+            <Pagination
+              page={pagination.page}
+              totalPages={pagination.totalPages}
+              total={pagination.total}
+              limit={pagination.limit}
+              onPageChange={setPage}
+              onLimitChange={(l) => { setLimit(l); setPage(1) }}
+            />
           )}
         </CardContent>
       </Card>

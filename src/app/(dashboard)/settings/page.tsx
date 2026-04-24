@@ -163,6 +163,10 @@ export default function SettingsPage() {
             <DollarSign className="h-4 w-4 mr-2" />
             Billing Settings
           </TabsTrigger>
+          <TabsTrigger value="security">
+            <Shield className="h-4 w-4 mr-2" />
+            Security
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="firm" className="mt-6">
@@ -408,7 +412,175 @@ export default function SettingsPage() {
             </Card>
           </div>
         </TabsContent>
+
+        <TabsContent value="security" className="mt-6">
+          <SecuritySettings />
+        </TabsContent>
       </Tabs>
+    </div>
+  )
+}
+
+function SecuritySettings() {
+  const [currentPassword, setCurrentPassword] = useState("")
+  const [newPassword, setNewPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [changePwLoading, setChangePwLoading] = useState(false)
+  const [changePwMessage, setChangePwMessage] = useState("")
+  const [changePwError, setChangePwError] = useState("")
+  const [verifyLoading, setVerifyLoading] = useState(false)
+  const [verifyMessage, setVerifyMessage] = useState("")
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setChangePwError("")
+    setChangePwMessage("")
+
+    if (newPassword !== confirmPassword) {
+      setChangePwError("Passwords do not match")
+      return
+    }
+
+    if (newPassword.length < 8) {
+      setChangePwError("Password must be at least 8 characters")
+      return
+    }
+
+    setChangePwLoading(true)
+    try {
+      const res = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      })
+      const data = await res.json()
+
+      if (res.ok) {
+        setChangePwMessage("Password changed successfully")
+        setCurrentPassword("")
+        setNewPassword("")
+        setConfirmPassword("")
+      } else {
+        setChangePwError(data.error || "Failed to change password")
+      }
+    } catch {
+      setChangePwError("Something went wrong")
+    } finally {
+      setChangePwLoading(false)
+    }
+  }
+
+  const handleSendVerification = async () => {
+    setVerifyLoading(true)
+    setVerifyMessage("")
+    try {
+      const res = await fetch("/api/auth/verify-email", { method: "POST" })
+      const data = await res.json()
+      setVerifyMessage(data.message || "Verification email sent")
+    } catch {
+      setVerifyMessage("Failed to send verification email")
+    } finally {
+      setVerifyLoading(false)
+    }
+  }
+
+  const getPasswordStrength = (password: string) => {
+    let score = 0
+    if (password.length >= 8) score++
+    if (password.length >= 12) score++
+    if (/[A-Z]/.test(password)) score++
+    if (/[0-9]/.test(password)) score++
+    if (/[^A-Za-z0-9]/.test(password)) score++
+    return Math.min(4, score)
+  }
+
+  const strengthLabels = ["Very Weak", "Weak", "Fair", "Strong", "Very Strong"]
+  const strengthColors = ["bg-red-500", "bg-orange-500", "bg-yellow-500", "bg-blue-500", "bg-green-500"]
+  const strength = getPasswordStrength(newPassword)
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Change Password</CardTitle>
+          <CardDescription>Update your account password</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
+            {changePwError && (
+              <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg">{changePwError}</div>
+            )}
+            {changePwMessage && (
+              <div className="p-3 bg-green-50 text-green-600 text-sm rounded-lg">{changePwMessage}</div>
+            )}
+            <div className="space-y-2">
+              <Label>Current Password</Label>
+              <Input
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>New Password</Label>
+              <Input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+                minLength={8}
+              />
+              {newPassword && (
+                <div className="space-y-1">
+                  <div className="flex gap-1">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <div key={i} className={`h-1.5 flex-1 rounded-full ${i <= strength ? strengthColors[strength] : "bg-gray-200"}`} />
+                    ))}
+                  </div>
+                  <p className={`text-xs ${strength >= 3 ? "text-green-600" : strength >= 2 ? "text-yellow-600" : "text-red-600"}`}>
+                    {strengthLabels[strength]}
+                  </p>
+                </div>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Confirm New Password</Label>
+              <Input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                minLength={8}
+              />
+              {confirmPassword && newPassword !== confirmPassword && (
+                <p className="text-xs text-red-600">Passwords do not match</p>
+              )}
+            </div>
+            <Button type="submit" disabled={changePwLoading}>
+              {changePwLoading ? "Changing..." : "Change Password"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Email Verification</CardTitle>
+          <CardDescription>Verify your email address for account security</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {verifyMessage && (
+            <div className="p-3 bg-blue-50 text-blue-600 text-sm rounded-lg">{verifyMessage}</div>
+          )}
+          <p className="text-sm text-muted-foreground">
+            Click below to send a verification email to your registered email address.
+          </p>
+          <Button variant="outline" onClick={handleSendVerification} disabled={verifyLoading}>
+            {verifyLoading ? "Sending..." : "Send Verification Email"}
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   )
 }

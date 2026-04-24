@@ -17,9 +17,19 @@ import {
 } from "@/components/ui/select"
 import { ArrowLeft } from "lucide-react"
 
+interface FieldErrors {
+  [key: string]: string
+}
+
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const phoneRegex = /^[\d\s\-().+]+$/
+const zipRegex = /^\d{5}(-\d{4})?$/
+
 export default function NewClientPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [errors, setErrors] = useState<FieldErrors>({})
+  const [submitError, setSubmitError] = useState("")
   const [clientType, setClientType] = useState("INDIVIDUAL")
   const [formData, setFormData] = useState({
     firstName: "",
@@ -36,12 +46,67 @@ export default function NewClientPage() {
     notes: "",
   })
 
+  const validateField = (field: string, value: string): string => {
+    switch (field) {
+      case "firstName":
+        if (clientType === "INDIVIDUAL" && !value.trim()) return "First name is required"
+        if (value.length > 100) return "First name is too long"
+        return ""
+      case "lastName":
+        if (clientType === "INDIVIDUAL" && !value.trim()) return "Last name is required"
+        if (value.length > 100) return "Last name is too long"
+        return ""
+      case "companyName":
+        if (clientType !== "INDIVIDUAL" && !value.trim()) return "Company name is required"
+        if (value.length > 200) return "Company name is too long"
+        return ""
+      case "email":
+        if (value && !emailRegex.test(value)) return "Invalid email address"
+        return ""
+      case "phone":
+      case "mobile":
+        if (value && !phoneRegex.test(value)) return "Invalid phone number"
+        return ""
+      case "zip":
+        if (value && !zipRegex.test(value)) return "Invalid ZIP code (e.g., 10001 or 10001-1234)"
+        return ""
+      case "state":
+        if (value && value.length > 2) return "Use 2-letter state abbreviation"
+        return ""
+      default:
+        return ""
+    }
+  }
+
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
+    const error = validateField(field, value)
+    setErrors((prev) => ({ ...prev, [field]: error }))
+  }
+
+  const validateAll = (): boolean => {
+    const newErrors: FieldErrors = {}
+    if (clientType === "INDIVIDUAL") {
+      if (!formData.firstName.trim()) newErrors.firstName = "First name is required"
+      if (!formData.lastName.trim()) newErrors.lastName = "Last name is required"
+    } else {
+      if (!formData.companyName.trim()) newErrors.companyName = "Company name is required"
+    }
+    if (formData.email && !emailRegex.test(formData.email)) newErrors.email = "Invalid email address"
+    if (formData.phone && !phoneRegex.test(formData.phone)) newErrors.phone = "Invalid phone number"
+    if (formData.mobile && !phoneRegex.test(formData.mobile)) newErrors.mobile = "Invalid phone number"
+    if (formData.zip && !zipRegex.test(formData.zip)) newErrors.zip = "Invalid ZIP code"
+    if (formData.state && formData.state.length > 2) newErrors.state = "Use 2-letter state abbreviation"
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setSubmitError("")
+
+    if (!validateAll()) return
+
     setLoading(true)
 
     try {
@@ -57,9 +122,13 @@ export default function NewClientPage() {
       if (res.ok) {
         const client = await res.json()
         router.push(`/clients/${client.id}`)
+      } else {
+        const data = await res.json()
+        setSubmitError(data.error || "Failed to create client")
       }
     } catch (error) {
       console.error("Failed to create client:", error)
+      setSubmitError("An unexpected error occurred")
     } finally {
       setLoading(false)
     }
@@ -84,6 +153,12 @@ export default function NewClientPage() {
 
       <form onSubmit={handleSubmit}>
         <div className="grid gap-6 lg:grid-cols-2">
+          {submitError && (
+            <div className="lg:col-span-2 p-3 rounded-md bg-red-50 text-red-600 text-sm">
+              {submitError}
+            </div>
+          )}
+
           {/* Client Type */}
           <Card className="lg:col-span-2">
             <CardHeader>
@@ -119,8 +194,10 @@ export default function NewClientPage() {
                         id="firstName"
                         value={formData.firstName}
                         onChange={(e) => handleChange("firstName", e.target.value)}
+                        className={errors.firstName ? "border-red-500" : ""}
                         required
                       />
+                      {errors.firstName && <p className="text-xs text-red-500">{errors.firstName}</p>}
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="lastName">Last Name *</Label>
@@ -128,8 +205,10 @@ export default function NewClientPage() {
                         id="lastName"
                         value={formData.lastName}
                         onChange={(e) => handleChange("lastName", e.target.value)}
+                        className={errors.lastName ? "border-red-500" : ""}
                         required
                       />
+                      {errors.lastName && <p className="text-xs text-red-500">{errors.lastName}</p>}
                     </div>
                   </div>
                 </>
@@ -140,8 +219,10 @@ export default function NewClientPage() {
                     id="companyName"
                     value={formData.companyName}
                     onChange={(e) => handleChange("companyName", e.target.value)}
+                    className={errors.companyName ? "border-red-500" : ""}
                     required
                   />
+                  {errors.companyName && <p className="text-xs text-red-500">{errors.companyName}</p>}
                 </div>
               )}
 
@@ -152,7 +233,9 @@ export default function NewClientPage() {
                   type="email"
                   value={formData.email}
                   onChange={(e) => handleChange("email", e.target.value)}
+                  className={errors.email ? "border-red-500" : ""}
                 />
+                {errors.email && <p className="text-xs text-red-500">{errors.email}</p>}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -162,7 +245,9 @@ export default function NewClientPage() {
                     id="phone"
                     value={formData.phone}
                     onChange={(e) => handleChange("phone", e.target.value)}
+                    className={errors.phone ? "border-red-500" : ""}
                   />
+                  {errors.phone && <p className="text-xs text-red-500">{errors.phone}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="mobile">Mobile</Label>
@@ -170,7 +255,9 @@ export default function NewClientPage() {
                     id="mobile"
                     value={formData.mobile}
                     onChange={(e) => handleChange("mobile", e.target.value)}
+                    className={errors.mobile ? "border-red-500" : ""}
                   />
+                  {errors.mobile && <p className="text-xs text-red-500">{errors.mobile}</p>}
                 </div>
               </div>
             </CardContent>
@@ -206,7 +293,11 @@ export default function NewClientPage() {
                     id="state"
                     value={formData.state}
                     onChange={(e) => handleChange("state", e.target.value)}
+                    className={errors.state ? "border-red-500" : ""}
+                    maxLength={2}
+                    placeholder="NY"
                   />
+                  {errors.state && <p className="text-xs text-red-500">{errors.state}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="zip">ZIP</Label>
@@ -214,7 +305,10 @@ export default function NewClientPage() {
                     id="zip"
                     value={formData.zip}
                     onChange={(e) => handleChange("zip", e.target.value)}
+                    className={errors.zip ? "border-red-500" : ""}
+                    placeholder="10001"
                   />
+                  {errors.zip && <p className="text-xs text-red-500">{errors.zip}</p>}
                 </div>
               </div>
             </CardContent>

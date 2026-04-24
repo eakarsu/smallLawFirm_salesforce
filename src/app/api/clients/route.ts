@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import { generateClientNumber } from '@/lib/utils'
+import { rateLimiter } from '@/lib/rate-limit'
 
 export async function GET(request: Request) {
   try {
@@ -11,10 +12,19 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const { success } = rateLimiter(`clients-${session.user.id}`, 100)
+    if (!success) {
+      return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
+    }
+
     const { searchParams } = new URL(request.url)
     const search = searchParams.get('search') || ''
     const status = searchParams.get('status') || ''
     const type = searchParams.get('type') || ''
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '25')
+    const sortBy = searchParams.get('sortBy') || 'createdAt'
+    const sortOrder = searchParams.get('sortOrder') || 'desc'
 
     const where: Record<string, unknown> = {
       firmId: session.user.firmId,
@@ -38,15 +48,32 @@ export async function GET(request: Request) {
       where.type = type
     }
 
-    const clients = await prisma.client.findMany({
-      where,
-      include: {
-        _count: { select: { matters: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    })
+    const allowedSortFields = ['createdAt', 'displayName', 'clientNumber', 'status', 'type', 'email']
+    const orderField = allowedSortFields.includes(sortBy) ? sortBy : 'createdAt'
+    const orderDir = sortOrder === 'asc' ? 'asc' : 'desc'
 
-    return NextResponse.json(clients)
+    const [clients, total] = await Promise.all([
+      prisma.client.findMany({
+        where,
+        include: {
+          _count: { select: { matters: true } },
+        },
+        orderBy: { [orderField]: orderDir },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.client.count({ where }),
+    ])
+
+    return NextResponse.json({
+      data: clients,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    })
   } catch (error) {
     console.error('Clients API error:', error)
     return NextResponse.json(

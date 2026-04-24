@@ -99,7 +99,8 @@ export default function CalendarPage() {
           mattersRes.json(),
         ])
         setEvents(eventsData)
-        setMatters(mattersData)
+        const mattersList = mattersData.data || mattersData
+        setMatters(Array.isArray(mattersList) ? mattersList : [])
       } catch (error) {
         console.error("Failed to fetch data:", error)
       } finally {

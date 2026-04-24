@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { PasswordStrength } from "@/components/ui/password-strength"
+import { validatePasswordStrength } from "@/lib/password-validation"
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -27,6 +29,12 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
+
+    const strength = validatePasswordStrength(formData.password)
+    if (!strength.isValid) {
+      setError("Password is too weak. " + strength.suggestions[0])
+      return
+    }
 
     if (formData.password !== formData.confirmPassword) {
       setError("Passwords do not match")
@@ -152,6 +160,7 @@ export default function RegisterPage() {
                 onChange={(e) => handleChange("password", e.target.value)}
                 required
               />
+              {formData.password && <PasswordStrength password={formData.password} />}
             </div>
             <div className="space-y-2">
               <Label htmlFor="confirmPassword">Confirm Password</Label>

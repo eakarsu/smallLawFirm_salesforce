@@ -17,6 +17,7 @@ import {
   ArrowRight,
 } from "lucide-react"
 import { formatCurrency, formatDate, getStatusColor } from "@/lib/utils"
+import { DashboardSkeleton } from "@/components/ui/skeleton"
 
 interface DashboardStats {
   openMatters: number
@@ -78,11 +79,7 @@ export default function DashboardPage() {
   }, [])
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="spinner" />
-      </div>
-    )
+    return <DashboardSkeleton />
   }
 
   return (

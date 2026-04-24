@@ -32,12 +32,18 @@ interface PracticeArea {
   color: string
 }
 
+interface FieldErrors {
+  [key: string]: string
+}
+
 export default function NewMatterPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const preselectedClientId = searchParams.get("clientId")
 
   const [loading, setLoading] = useState(false)
+  const [errors, setErrors] = useState<FieldErrors>({})
+  const [submitError, setSubmitError] = useState("")
   const [clients, setClients] = useState<Client[]>([])
   const [practiceAreas, setPracticeAreas] = useState<PracticeArea[]>([])
   const [formData, setFormData] = useState({
@@ -68,7 +74,8 @@ export default function NewMatterPage() {
           clientsRes.json(),
           paRes.json(),
         ])
-        setClients(clientsData.filter((c: Client) => c.type !== "ARCHIVED"))
+        const clientsList = clientsData.data || clientsData
+        setClients((Array.isArray(clientsList) ? clientsList : []).filter((c: Client) => c.type !== "ARCHIVED"))
         setPracticeAreas(paData)
       } catch (error) {
         console.error("Failed to fetch data:", error)
@@ -78,12 +85,58 @@ export default function NewMatterPage() {
     fetchData()
   }, [])
 
+  const validateField = (field: string, value: string): string => {
+    switch (field) {
+      case "name":
+        if (!value.trim()) return "Matter name is required"
+        if (value.length > 200) return "Matter name is too long"
+        return ""
+      case "clientId":
+        if (!value) return "Client is required"
+        return ""
+      case "practiceAreaId":
+        if (!value) return "Practice area is required"
+        return ""
+      case "flatFee":
+        if (formData.billingType === "FLAT_FEE" && value && Number(value) < 0) return "Fee must be positive"
+        return ""
+      case "contingencyPct":
+        if (value && (Number(value) < 0 || Number(value) > 100)) return "Percentage must be 0-100"
+        return ""
+      case "retainerAmount":
+      case "budgetAmount":
+        if (value && Number(value) < 0) return "Amount must be positive"
+        return ""
+      default:
+        return ""
+    }
+  }
+
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
+    const error = validateField(field, value)
+    setErrors((prev) => ({ ...prev, [field]: error }))
+  }
+
+  const validateAll = (): boolean => {
+    const newErrors: FieldErrors = {}
+    if (!formData.name.trim()) newErrors.name = "Matter name is required"
+    if (!formData.clientId) newErrors.clientId = "Client is required"
+    if (!formData.practiceAreaId) newErrors.practiceAreaId = "Practice area is required"
+    if (formData.billingType === "FLAT_FEE" && formData.flatFee && Number(formData.flatFee) < 0) newErrors.flatFee = "Fee must be positive"
+    if (formData.contingencyPct && (Number(formData.contingencyPct) < 0 || Number(formData.contingencyPct) > 100)) newErrors.contingencyPct = "Percentage must be 0-100"
+    if (formData.retainerAmount && Number(formData.retainerAmount) < 0) newErrors.retainerAmount = "Amount must be positive"
+    if (formData.budgetAmount && Number(formData.budgetAmount) < 0) newErrors.budgetAmount = "Amount must be positive"
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setSubmitError("")
+
+    if (!validateAll()) return
+
     setLoading(true)
 
     try {
@@ -96,9 +149,13 @@ export default function NewMatterPage() {
       if (res.ok) {
         const matter = await res.json()
         router.push(`/matters/${matter.id}`)
+      } else {
+        const data = await res.json()
+        setSubmitError(data.error || "Failed to create matter")
       }
     } catch (error) {
       console.error("Failed to create matter:", error)
+      setSubmitError("An unexpected error occurred")
     } finally {
       setLoading(false)
     }
@@ -128,6 +185,12 @@ export default function NewMatterPage() {
 
       <form onSubmit={handleSubmit}>
         <div className="grid gap-6 lg:grid-cols-2">
+          {submitError && (
+            <div className="lg:col-span-2 p-3 rounded-md bg-red-50 text-red-600 text-sm">
+              {submitError}
+            </div>
+          )}
+
           {/* Basic Information */}
           <Card className="lg:col-span-2">
             <CardHeader>
@@ -141,7 +204,7 @@ export default function NewMatterPage() {
                     value={formData.clientId}
                     onValueChange={(value) => handleChange("clientId", value)}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className={errors.clientId ? "border-red-500" : ""}>
                       <SelectValue placeholder="Select client" />
                     </SelectTrigger>
                     <SelectContent>
@@ -152,6 +215,7 @@ export default function NewMatterPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                  {errors.clientId && <p className="text-xs text-red-500">{errors.clientId}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="practiceAreaId">Practice Area *</Label>
@@ -159,7 +223,7 @@ export default function NewMatterPage() {
                     value={formData.practiceAreaId}
                     onValueChange={(value) => handleChange("practiceAreaId", value)}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className={errors.practiceAreaId ? "border-red-500" : ""}>
                       <SelectValue placeholder="Select practice area" />
                     </SelectTrigger>
                     <SelectContent>
@@ -173,6 +237,7 @@ export default function NewMatterPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                  {errors.practiceAreaId && <p className="text-xs text-red-500">{errors.practiceAreaId}</p>}
                 </div>
               </div>
 
@@ -183,8 +248,10 @@ export default function NewMatterPage() {
                   placeholder="e.g., Smith Divorce, Jones v. ABC Corp"
                   value={formData.name}
                   onChange={(e) => handleChange("name", e.target.value)}
+                  className={errors.name ? "border-red-500" : ""}
                   required
                 />
+                {errors.name && <p className="text-xs text-red-500">{errors.name}</p>}
               </div>
 
               <div className="space-y-2">
@@ -234,7 +301,11 @@ export default function NewMatterPage() {
                     placeholder="0.00"
                     value={formData.flatFee}
                     onChange={(e) => handleChange("flatFee", e.target.value)}
+                    className={errors.flatFee ? "border-red-500" : ""}
+                    min="0"
+                    step="0.01"
                   />
+                  {errors.flatFee && <p className="text-xs text-red-500">{errors.flatFee}</p>}
                 </div>
               )}
 
@@ -247,7 +318,12 @@ export default function NewMatterPage() {
                     placeholder="33.33"
                     value={formData.contingencyPct}
                     onChange={(e) => handleChange("contingencyPct", e.target.value)}
+                    className={errors.contingencyPct ? "border-red-500" : ""}
+                    min="0"
+                    max="100"
+                    step="0.01"
                   />
+                  {errors.contingencyPct && <p className="text-xs text-red-500">{errors.contingencyPct}</p>}
                 </div>
               )}
 
@@ -259,7 +335,11 @@ export default function NewMatterPage() {
                   placeholder="0.00"
                   value={formData.retainerAmount}
                   onChange={(e) => handleChange("retainerAmount", e.target.value)}
+                  className={errors.retainerAmount ? "border-red-500" : ""}
+                  min="0"
+                  step="0.01"
                 />
+                {errors.retainerAmount && <p className="text-xs text-red-500">{errors.retainerAmount}</p>}
               </div>
 
               <div className="space-y-2">
@@ -270,7 +350,11 @@ export default function NewMatterPage() {
                   placeholder="0.00"
                   value={formData.budgetAmount}
                   onChange={(e) => handleChange("budgetAmount", e.target.value)}
+                  className={errors.budgetAmount ? "border-red-500" : ""}
+                  min="0"
+                  step="0.01"
                 />
+                {errors.budgetAmount && <p className="text-xs text-red-500">{errors.budgetAmount}</p>}
               </div>
             </CardContent>
           </Card>

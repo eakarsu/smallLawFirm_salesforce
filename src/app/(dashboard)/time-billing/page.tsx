@@ -32,8 +32,9 @@ import {
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Plus, Search, Clock, Play, Square, DollarSign, Calendar, User, FileText, Edit, Trash2 } from "lucide-react"
+import { Plus, Search, Clock, Play, Square, DollarSign, Calendar, User, FileText, Edit, Trash2, Download } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
+import { PageSkeleton } from "@/components/ui/skeleton"
 
 interface TimeEntry {
   id: string
@@ -111,7 +112,8 @@ export default function TimeBillingPage() {
           codesRes.json(),
         ])
         setEntries(Array.isArray(entriesData) ? entriesData : [])
-        setMatters(Array.isArray(mattersData) ? mattersData : [])
+        const mattersList = mattersData.data || mattersData
+        setMatters(Array.isArray(mattersList) ? mattersList : [])
         setActivityCodes(Array.isArray(codesData) ? codesData : [])
       } catch (error) {
         console.error("Failed to fetch data:", error)
@@ -186,6 +188,8 @@ export default function TimeBillingPage() {
       console.error("Failed to create time entry:", error)
     }
   }
+
+  if (loading) return <PageSkeleton />
 
   const totals = entries.reduce(
     (acc, entry) => {
@@ -276,6 +280,10 @@ export default function TimeBillingPage() {
               </Button>
             </div>
           )}
+          <Button variant="outline" onClick={() => window.location.href = "/api/time-entries/export"}>
+            <Download className="mr-2 h-4 w-4" />
+            Export CSV
+          </Button>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button>
@@ -470,11 +478,7 @@ export default function TimeBillingPage() {
       {/* Time Entries Table */}
       <Card>
         <CardContent className="p-0">
-          {loading ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="spinner" />
-            </div>
-          ) : entries.length === 0 ? (
+          {entries.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-center">
               <Clock className="h-12 w-12 text-gray-300 mb-4" />
               <h3 className="text-lg font-medium">No time entries found</h3>
