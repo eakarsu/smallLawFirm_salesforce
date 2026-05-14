@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
+import { encryptField, decryptField, maskSSN, maskEIN } from '@/lib/encryption'
 
 export async function GET(
   request: Request,
@@ -43,7 +44,19 @@ export async function GET(
       return NextResponse.json({ error: 'Client not found' }, { status: 404 })
     }
 
-    return NextResponse.json(client)
+    // Decrypt sensitive fields before returning; mask for non-admin roles
+    const isAdmin = session.user.role === 'ADMIN' || session.user.role === 'PARTNER'
+    const decryptedClient = {
+      ...client,
+      ssn: client.ssn
+        ? (isAdmin ? decryptField(client.ssn) : maskSSN(decryptField(client.ssn)))
+        : null,
+      ein: client.ein
+        ? (isAdmin ? decryptField(client.ein) : maskEIN(decryptField(client.ein)))
+        : null,
+    }
+
+    return NextResponse.json(decryptedClient)
   } catch (error) {
     console.error('Get client error:', error)
     return NextResponse.json(
@@ -74,6 +87,14 @@ export async function PUT(
       return NextResponse.json({ error: 'Client not found' }, { status: 404 })
     }
 
+    // Encrypt sensitive fields when provided
+    const ssnToStore = body.ssn !== undefined
+      ? (process.env.ENCRYPTION_KEY ? encryptField(body.ssn) : body.ssn)
+      : undefined
+    const einToStore = body.ein !== undefined
+      ? (process.env.ENCRYPTION_KEY ? encryptField(body.ein) : body.ein)
+      : undefined
+
     const client = await prisma.client.update({
       where: { id: params.id },
       data: {
@@ -92,6 +113,8 @@ export async function PUT(
         referralSource: body.referralSource,
         referredBy: body.referredBy,
         notes: body.notes,
+        ...(ssnToStore !== undefined && { ssn: ssnToStore }),
+        ...(einToStore !== undefined && { ein: einToStore }),
       },
     })
 

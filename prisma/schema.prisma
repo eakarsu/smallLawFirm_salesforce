@@ -144,6 +144,11 @@ model Client {
   notes           String?
   tags            String[]
 
+  // Client portal access
+  portalToken     String?     @unique // Secure random token for portal access
+  portalEnabled   Boolean     @default(false)
+  portalLastLogin DateTime?
+
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 

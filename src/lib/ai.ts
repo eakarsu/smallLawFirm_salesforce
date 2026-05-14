@@ -620,3 +620,349 @@ Respond ONLY with valid JSON, no additional text.`
     throw new Error('Failed to analyze client intake')
   }
 }
+
+export async function predictDeadlines(params: {
+  matterType: string
+  jurisdiction?: string
+  filingDate?: string
+  caseDetails?: string
+}): Promise<{
+  upcomingDeadlines: Array<{ name: string; daysFromFiling?: number; targetDate?: string; criticality: string; notes: string }>
+  warnings: string[]
+  recommendedReminders: string[]
+  notes: string
+}> {
+  const systemPrompt = `You are a litigation calendar assistant. Predict critical deadlines for the matter (statute of limitations, response windows, discovery cutoffs, motion deadlines, trial dates). Output STRICT JSON only. This is informational only and not legal advice.`
+  const userPrompt = `Matter Type: ${params.matterType}
+Jurisdiction: ${params.jurisdiction || 'unspecified'}
+Filing Date: ${params.filingDate || 'unspecified'}
+Case Details: ${params.caseDetails || 'none'}
+
+Respond with JSON of shape:
+{
+  "upcomingDeadlines": [{ "name": "...", "daysFromFiling": 0, "targetDate": "YYYY-MM-DD", "criticality": "low|medium|high|critical", "notes": "..." }],
+  "warnings": ["..."],
+  "recommendedReminders": ["..."],
+  "notes": "..."
+}`
+
+  try {
+    const completion = await getOpenAIClient().chat.completions.create({
+      model: DEFAULT_MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.3,
+      max_tokens: 1500
+    })
+    const content = completion.choices[0]?.message?.content || ''
+    try {
+      return JSON.parse(extractJSON(content))
+    } catch {
+      return {
+        upcomingDeadlines: [],
+        warnings: ['Unable to parse AI response — please retry.'],
+        recommendedReminders: [],
+        notes: 'fallback'
+      }
+    }
+  } catch (error) {
+    console.error('AI deadline prediction error:', error)
+    throw new Error('Failed to predict deadlines')
+  }
+}
+
+export async function checkConflicts(params: {
+  prospectiveClient: { name: string; aliases?: string[]; companyName?: string }
+  adverseParties: string[]
+  knownRepresentations?: Array<{ name: string; status: string }>
+}): Promise<{
+  riskLevel: string
+  potentialConflicts: Array<{ withParty: string; reason: string; severity: string }>
+  recommendation: string
+  notes: string
+}> {
+  const systemPrompt = `You are a law firm conflict-of-interest analyst. Review the prospective client and adverse-party context against known representations and flag potential conflicts. Output STRICT JSON only. This is preliminary; firm conflict database must be checked for the authoritative answer.`
+  const userPrompt = `Prospective Client: ${JSON.stringify(params.prospectiveClient)}
+Adverse Parties: ${JSON.stringify(params.adverseParties)}
+Known Representations: ${JSON.stringify(params.knownRepresentations || [])}
+
+Respond with JSON:
+{
+  "riskLevel": "none|low|medium|high|disqualifying",
+  "potentialConflicts": [{ "withParty": "...", "reason": "...", "severity": "low|medium|high" }],
+  "recommendation": "proceed|investigate|decline",
+  "notes": "..."
+}`
+
+  try {
+    const completion = await getOpenAIClient().chat.completions.create({
+      model: DEFAULT_MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.2,
+      max_tokens: 1500
+    })
+    const content = completion.choices[0]?.message?.content || ''
+    try {
+      return JSON.parse(extractJSON(content))
+    } catch {
+      return {
+        riskLevel: 'unknown',
+        potentialConflicts: [],
+        recommendation: 'investigate',
+        notes: 'AI parse failed; manual review required.'
+      }
+    }
+  } catch (error) {
+    console.error('AI conflict check error:', error)
+    throw new Error('Failed to run conflict check')
+  }
+}
+
+export async function analyzeOpponent(params: {
+  opposingCounselName: string
+  opposingFirm?: string
+  jurisdiction?: string
+  practiceArea?: string
+  matterType?: string
+  knownCases?: string
+  additionalContext?: string
+}): Promise<{
+  attorneyProfile: { background: string; reputation: string; areasOfFocus: string[] }
+  litigationStyle: string
+  knownTactics: string[]
+  strengths: string[]
+  weaknesses: string[]
+  notableCases: Array<{ name: string; outcome: string; relevance: string }>
+  strategicRecommendations: string[]
+  watchpoints: string[]
+  notes: string
+}> {
+  const systemPrompt = `You are a litigation strategy analyst preparing an opposing-counsel briefing for a small law firm. Use only general, publicly inferable patterns. Do not fabricate specific personal details. Output STRICT JSON only. This is informational, not a substitute for direct research or background checks.`
+  const userPrompt = `Opposing Counsel: ${params.opposingCounselName}
+Firm: ${params.opposingFirm || 'unspecified'}
+Jurisdiction: ${params.jurisdiction || 'unspecified'}
+Practice Area: ${params.practiceArea || 'unspecified'}
+Matter Type: ${params.matterType || 'unspecified'}
+Known Cases: ${params.knownCases || 'none provided'}
+Additional Context: ${params.additionalContext || 'none'}
+
+Respond with JSON of shape:
+{
+  "attorneyProfile": { "background": "...", "reputation": "...", "areasOfFocus": ["..."] },
+  "litigationStyle": "aggressive|measured|collaborative|evasive|unknown — with brief rationale",
+  "knownTactics": ["..."],
+  "strengths": ["..."],
+  "weaknesses": ["..."],
+  "notableCases": [{ "name": "...", "outcome": "...", "relevance": "..." }],
+  "strategicRecommendations": ["..."],
+  "watchpoints": ["..."],
+  "notes": "Caveats, including reminder this is preliminary intelligence only."
+}`
+
+  try {
+    const completion = await getOpenAIClient().chat.completions.create({
+      model: DEFAULT_MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.3,
+      max_tokens: 1800
+    })
+    const content = completion.choices[0]?.message?.content || ''
+    try {
+      const parsed = JSON.parse(extractJSON(content))
+      return {
+        attorneyProfile: parsed.attorneyProfile || { background: '', reputation: '', areasOfFocus: [] },
+        litigationStyle: parsed.litigationStyle || 'unknown',
+        knownTactics: Array.isArray(parsed.knownTactics) ? parsed.knownTactics : [],
+        strengths: Array.isArray(parsed.strengths) ? parsed.strengths : [],
+        weaknesses: Array.isArray(parsed.weaknesses) ? parsed.weaknesses : [],
+        notableCases: Array.isArray(parsed.notableCases) ? parsed.notableCases : [],
+        strategicRecommendations: Array.isArray(parsed.strategicRecommendations) ? parsed.strategicRecommendations : [],
+        watchpoints: Array.isArray(parsed.watchpoints) ? parsed.watchpoints : [],
+        notes: parsed.notes || ''
+      }
+    } catch {
+      return {
+        attorneyProfile: { background: '', reputation: '', areasOfFocus: [] },
+        litigationStyle: 'unknown',
+        knownTactics: [],
+        strengths: [],
+        weaknesses: [],
+        notableCases: [],
+        strategicRecommendations: ['Re-run the opponent analysis with more context'],
+        watchpoints: [],
+        notes: 'AI parse failed; manual review required.'
+      }
+    }
+  } catch (error) {
+    console.error('AI opponent analysis error:', error)
+    throw new Error('Failed to analyze opposing counsel')
+  }
+}
+
+// Apply pass 5: multi-jurisdiction compliance monitor.
+// Reviews matter facts against rules of professional conduct + procedural rules
+// across multiple jurisdictions; flags conflicts/gaps.
+export async function checkMultiJurisdictionCompliance(params: {
+  matterDescription: string
+  primaryJurisdiction: string
+  additionalJurisdictions: string[]
+  practiceArea?: string
+  clientLocations?: string[]
+  servicesOffered?: string[]
+}): Promise<{
+  jurisdictionalIssues: Array<{ jurisdiction: string; issue: string; severity: 'low' | 'medium' | 'high'; rule?: string }>
+  rulesOfProfessionalConductFlags: Array<{ jurisdiction: string; rule: string; concern: string }>
+  unauthorizedPracticeOfLawRisks: string[]
+  conflictsAcrossJurisdictions: string[]
+  recommendedSteps: string[]
+  proHacViceConsiderations: string[]
+  notes: string
+}> {
+  const systemPrompt = `You are a legal-ethics and multi-jurisdictional practice analyst for a small law firm. Output STRICT JSON only. Always include the caveat that this is preliminary guidance and not a substitute for a state-bar opinion or independent ethics counsel.`
+  const userPrompt = `Matter description: ${params.matterDescription}
+Primary jurisdiction: ${params.primaryJurisdiction}
+Additional jurisdictions: ${JSON.stringify(params.additionalJurisdictions || [])}
+Practice area: ${params.practiceArea || 'unspecified'}
+Client locations: ${JSON.stringify(params.clientLocations || [])}
+Services offered: ${JSON.stringify(params.servicesOffered || [])}
+
+Respond with JSON of shape:
+{
+  "jurisdictionalIssues": [{ "jurisdiction": "...", "issue": "...", "severity": "low|medium|high", "rule": "..." }],
+  "rulesOfProfessionalConductFlags": [{ "jurisdiction": "...", "rule": "...", "concern": "..." }],
+  "unauthorizedPracticeOfLawRisks": ["..."],
+  "conflictsAcrossJurisdictions": ["..."],
+  "recommendedSteps": ["..."],
+  "proHacViceConsiderations": ["..."],
+  "notes": "Caveats including reminder this is preliminary, not ethics counsel."
+}`
+
+  try {
+    const completion = await getOpenAIClient().chat.completions.create({
+      model: DEFAULT_MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.2,
+      max_tokens: 1800
+    })
+    const content = completion.choices[0]?.message?.content || ''
+    try {
+      const parsed = JSON.parse(extractJSON(content))
+      return {
+        jurisdictionalIssues: Array.isArray(parsed.jurisdictionalIssues) ? parsed.jurisdictionalIssues : [],
+        rulesOfProfessionalConductFlags: Array.isArray(parsed.rulesOfProfessionalConductFlags) ? parsed.rulesOfProfessionalConductFlags : [],
+        unauthorizedPracticeOfLawRisks: Array.isArray(parsed.unauthorizedPracticeOfLawRisks) ? parsed.unauthorizedPracticeOfLawRisks : [],
+        conflictsAcrossJurisdictions: Array.isArray(parsed.conflictsAcrossJurisdictions) ? parsed.conflictsAcrossJurisdictions : [],
+        recommendedSteps: Array.isArray(parsed.recommendedSteps) ? parsed.recommendedSteps : [],
+        proHacViceConsiderations: Array.isArray(parsed.proHacViceConsiderations) ? parsed.proHacViceConsiderations : [],
+        notes: parsed.notes || ''
+      }
+    } catch {
+      return {
+        jurisdictionalIssues: [],
+        rulesOfProfessionalConductFlags: [],
+        unauthorizedPracticeOfLawRisks: [],
+        conflictsAcrossJurisdictions: [],
+        recommendedSteps: ['Re-run the compliance check with more matter context'],
+        proHacViceConsiderations: [],
+        notes: 'AI parse failed; manual review required.'
+      }
+    }
+  } catch (error) {
+    console.error('AI multi-jurisdiction compliance error:', error)
+    throw new Error('Failed to run multi-jurisdiction compliance check')
+  }
+}
+
+// Apply pass 5: billing intelligence.
+// Analyzes time entries / billing patterns for trends, write-down risk, fee
+// realization signals, and recommendations. Inputs are summary stats + recent entries
+// (no PII assumed beyond what the firm already collects).
+export async function analyzeBillingIntelligence(params: {
+  periodStart?: string
+  periodEnd?: string
+  totalHoursTracked?: number
+  totalHoursBilled?: number
+  totalBilled?: number
+  totalCollected?: number
+  averageHourlyRate?: number
+  byMatter?: Array<{ matterId: string; matterName?: string; hours?: number; billed?: number; writeDownPercent?: number }>
+  byActivity?: Array<{ activityCode: string; hours?: number }>
+  outstandingARDays?: number
+  notes?: string
+}): Promise<{
+  realizationRatePercent: number | null
+  collectionRatePercent: number | null
+  trends: string[]
+  riskFlags: Array<{ flag: string; severity: 'low' | 'medium' | 'high'; recommendation: string }>
+  topOpportunities: string[]
+  matterLevelInsights: Array<{ matterId: string; insight: string }>
+  recommendations: string[]
+  summary: string
+}> {
+  const systemPrompt = `You are a law-firm financial / billing analyst. Use only the supplied data. Output STRICT JSON only.`
+  const userPrompt = `Billing data:
+${JSON.stringify(params, null, 2)}
+
+Respond with JSON:
+{
+  "realizationRatePercent": <number|null>,
+  "collectionRatePercent": <number|null>,
+  "trends": ["..."],
+  "riskFlags": [{ "flag": "...", "severity": "low|medium|high", "recommendation": "..." }],
+  "topOpportunities": ["..."],
+  "matterLevelInsights": [{ "matterId": "...", "insight": "..." }],
+  "recommendations": ["..."],
+  "summary": "..."
+}`
+
+  try {
+    const completion = await getOpenAIClient().chat.completions.create({
+      model: DEFAULT_MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.2,
+      max_tokens: 1800
+    })
+    const content = completion.choices[0]?.message?.content || ''
+    try {
+      const parsed = JSON.parse(extractJSON(content))
+      return {
+        realizationRatePercent: typeof parsed.realizationRatePercent === 'number' ? parsed.realizationRatePercent : null,
+        collectionRatePercent: typeof parsed.collectionRatePercent === 'number' ? parsed.collectionRatePercent : null,
+        trends: Array.isArray(parsed.trends) ? parsed.trends : [],
+        riskFlags: Array.isArray(parsed.riskFlags) ? parsed.riskFlags : [],
+        topOpportunities: Array.isArray(parsed.topOpportunities) ? parsed.topOpportunities : [],
+        matterLevelInsights: Array.isArray(parsed.matterLevelInsights) ? parsed.matterLevelInsights : [],
+        recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : [],
+        summary: parsed.summary || ''
+      }
+    } catch {
+      return {
+        realizationRatePercent: null,
+        collectionRatePercent: null,
+        trends: [],
+        riskFlags: [],
+        topOpportunities: [],
+        matterLevelInsights: [],
+        recommendations: ['Re-run with more billing data'],
+        summary: 'AI parse failed; manual review required.'
+      }
+    }
+  } catch (error) {
+    console.error('AI billing intelligence error:', error)
+    throw new Error('Failed to analyze billing intelligence')
+  }
+}

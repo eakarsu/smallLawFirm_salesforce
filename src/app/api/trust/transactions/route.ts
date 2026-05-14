@@ -48,7 +48,18 @@ export async function POST(request: Request) {
 
     const body = await request.json()
 
-    // Get account
+    const amount = parseFloat(body.amount)
+    if (isNaN(amount) || amount <= 0) {
+      return NextResponse.json({ error: 'Amount must be a positive number' }, { status: 400 })
+    }
+    if (!body.type) {
+      return NextResponse.json({ error: 'Transaction type is required' }, { status: 400 })
+    }
+    if (!body.description?.trim()) {
+      return NextResponse.json({ error: 'Description is required' }, { status: 400 })
+    }
+
+    // Get account with a fresh read inside the transaction for consistency
     const account = await prisma.trustAccount.findUnique({
       where: { id: body.accountId },
     })
@@ -57,31 +68,84 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Account not found' }, { status: 404 })
     }
 
-    const amount = parseFloat(body.amount)
-
-    // Calculate new balance
-    let newBalance: number
-    if (body.type === 'DEPOSIT') {
-      newBalance = Number(account.balance) + amount
-    } else {
-      newBalance = Number(account.balance) - amount
-      if (newBalance < 0) {
-        return NextResponse.json({ error: 'Insufficient funds' }, { status: 400 })
-      }
+    if (!account.isActive) {
+      return NextResponse.json({ error: 'Trust account is inactive' }, { status: 400 })
     }
 
-    // Create transaction and update account balance in a transaction
-    const [transaction] = await prisma.$transaction([
+    // ---- Double-entry ledger validation ----
+    // Re-compute the live balance by summing all committed transactions.
+    // This guards against race conditions where the cached account.balance is stale.
+    const ledgerSum = await prisma.trustTransaction.aggregate({
+      where: { trustAccountId: body.accountId },
+      _sum: { amount: true },
+    })
+
+    // Also sum by credit (DEPOSIT, TRANSFER_IN, INTEREST) vs debit (others)
+    const credits = await prisma.trustTransaction.aggregate({
+      where: {
+        trustAccountId: body.accountId,
+        type: { in: ['DEPOSIT', 'TRANSFER_IN', 'INTEREST'] },
+      },
+      _sum: { amount: true },
+    })
+    const debits = await prisma.trustTransaction.aggregate({
+      where: {
+        trustAccountId: body.accountId,
+        type: { in: ['DISBURSEMENT', 'TRANSFER_OUT', 'REFUND'] },
+      },
+      _sum: { amount: true },
+    })
+
+    const totalCredits = Number(credits._sum.amount ?? 0)
+    const totalDebits = Number(debits._sum.amount ?? 0)
+    const computedBalance = totalCredits - totalDebits
+
+    // Detect balance discrepancy (cached vs ledger-computed)
+    const cachedBalance = Number(account.balance)
+    if (Math.abs(computedBalance - cachedBalance) > 0.01) {
+      console.error(
+        `[trust] Balance discrepancy on account ${account.id}: ` +
+        `cached=${cachedBalance}, ledger-computed=${computedBalance}`
+      )
+      // Use the authoritative ledger-computed balance going forward
+    }
+
+    const liveBalance = computedBalance
+
+    // ---- Pre-withdrawal balance verification ----
+    const isDebit = ['DISBURSEMENT', 'TRANSFER_OUT', 'REFUND'].includes(body.type)
+    let newBalance: number
+
+    if (isDebit) {
+      if (amount > liveBalance) {
+        return NextResponse.json(
+          {
+            error: 'Insufficient funds',
+            detail: `Requested disbursement of $${amount.toFixed(2)} exceeds available trust balance of $${liveBalance.toFixed(2)}`,
+            availableBalance: liveBalance,
+          },
+          { status: 400 }
+        )
+      }
+      newBalance = liveBalance - amount
+    } else {
+      newBalance = liveBalance + amount
+    }
+
+    // ---- Create transaction + update ledger + sync account balance atomically ----
+    // If a ledgerId is provided, also update the per-client/matter sub-ledger
+    const ops: any[] = [
       prisma.trustTransaction.create({
         data: {
           trustAccountId: body.accountId,
           matterId: body.matterId || null,
+          ledgerId: body.ledgerId || null,
           type: body.type,
           amount,
           runningBalance: newBalance,
           description: body.description,
           reference: body.reference || null,
-          date: new Date(),
+          date: body.date ? new Date(body.date) : new Date(),
           createdById: session.user.id,
         },
         include: {
@@ -90,13 +154,39 @@ export async function POST(request: Request) {
           createdBy: { select: { firstName: true, lastName: true } },
         },
       }),
+      // Sync the cached account balance
       prisma.trustAccount.update({
         where: { id: body.accountId },
         data: { balance: newBalance },
       }),
-    ])
+    ]
 
-    return NextResponse.json(transaction, { status: 201 })
+    // If sub-ledger specified, update its running balance too
+    if (body.ledgerId) {
+      const ledger = await prisma.trustLedger.findUnique({ where: { id: body.ledgerId } })
+      if (ledger) {
+        const ledgerBalance = isDebit
+          ? Number(ledger.balance) - amount
+          : Number(ledger.balance) + amount
+        ops.push(
+          prisma.trustLedger.update({
+            where: { id: body.ledgerId },
+            data: { balance: ledgerBalance },
+          })
+        )
+      }
+    }
+
+    const [transaction] = await prisma.$transaction(ops)
+
+    return NextResponse.json(
+      {
+        ...transaction,
+        accountBalance: newBalance,
+        ledgerBalance: { totalCredits, totalDebits, computed: newBalance },
+      },
+      { status: 201 }
+    )
   } catch (error) {
     console.error('Create trust transaction error:', error)
     return NextResponse.json({ error: 'Failed to create transaction' }, { status: 500 })

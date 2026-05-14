@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import { generateClientNumber } from '@/lib/utils'
 import { rateLimiter } from '@/lib/rate-limit'
+import { encryptField } from '@/lib/encryption'
 
 export async function GET(request: Request) {
   try {
@@ -98,6 +99,10 @@ export async function POST(request: Request) {
         ? body.companyName
         : `${body.firstName || ''} ${body.lastName || ''}`.trim()) || 'Unknown Client'
 
+    // Encrypt sensitive fields before storage
+    const encryptedSSN = process.env.ENCRYPTION_KEY ? encryptField(body.ssn) : null
+    const encryptedEIN = process.env.ENCRYPTION_KEY ? encryptField(body.ein) : null
+
     const client = await prisma.client.create({
       data: {
         clientNumber: generateClientNumber(),
@@ -118,6 +123,8 @@ export async function POST(request: Request) {
         referredBy: body.referredBy,
         notes: body.notes,
         firmId: session.user.firmId,
+        ...(encryptedSSN !== undefined && { ssn: encryptedSSN }),
+        ...(encryptedEIN !== undefined && { ein: encryptedEIN }),
       },
     })
 

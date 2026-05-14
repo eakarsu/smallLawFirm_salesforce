@@ -19,6 +19,10 @@ import {
   UserCircle,
   Phone,
   BarChart3,
+  CalendarClock,
+  ShieldAlert,
+  Search,
+  Globe,
 } from "lucide-react"
 import { LogoIcon } from "@/components/ui/logo"
 
@@ -43,6 +47,11 @@ const aiNavigation = [
   { name: "Time Capture", href: "/ai/time-capture", icon: Clock },
   { name: "Case Analysis", href: "/ai/case-analysis", icon: Briefcase },
   { name: "Client Intake", href: "/ai/client-intake", icon: Users },
+  { name: "Deadline Predictor", href: "/ai/deadline-predictor", icon: CalendarClock },
+  { name: "Conflict Checker", href: "/ai/conflict-checker", icon: ShieldAlert },
+  { name: "Opponent Analysis", href: "/ai/opponent-analysis", icon: Search },
+  { name: "Multi-Jurisdiction Compliance", href: "/ai/multi-jurisdiction-compliance", icon: Globe },
+  { name: "Billing Intelligence", href: "/ai/billing-intelligence", icon: DollarSign },
 ]
 
 const settingsNavigation = [
