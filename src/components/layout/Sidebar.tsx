@@ -34,6 +34,7 @@ const navigation = [
   { name: "Time & Billing", href: "/time-billing", icon: Clock },
   { name: "Invoices", href: "/invoices", icon: DollarSign },
   { name: "Trust Accounts", href: "/trust", icon: Wallet },
+  { name: "Retainer Reconcile", href: "/trust-retainer-reconciliation", icon: Wallet },
   { name: "Calendar", href: "/calendar", icon: Calendar },
   { name: "Deadlines", href: "/deadlines", icon: AlertCircle },
   { name: "Contacts", href: "/contacts", icon: Phone },
