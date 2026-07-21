@@ -148,6 +148,8 @@ export default function ContactsPage() {
 
   useEffect(() => {
     fetchData()
+    // The filter values below intentionally define when the request is refreshed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, typeFilter, page, limit, sortBy, sortOrder])
 
   const handleSort = (field: string) => {

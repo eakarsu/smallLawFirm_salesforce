@@ -1,43 +1,35 @@
 import { NextResponse } from 'next/server'
-import crypto from 'crypto'
 import prisma from '@/lib/prisma'
+import { applicationUrl, issueAuthToken } from '@/lib/auth-tokens'
+import { sendEmail, textEmailHtml } from '@/lib/email'
+import { rateLimiter } from '@/lib/rate-limit'
 
 export async function POST(request: Request) {
+  const generic = { message: 'If an account with that email exists, a password reset link has been sent.' }
   try {
-    const { email } = await request.json()
-
-    if (!email) {
-      return NextResponse.json({ error: 'Email is required' }, { status: 400 })
-    }
-
+    const value: unknown = await request.json()
+    const email = typeof value === 'object' && value && 'email' in value ? String(value.email).trim().toLowerCase() : ''
+    const address = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+    if (!rateLimiter(`forgot:${address}:${email}`, 5, 15 * 60_000).success) return NextResponse.json(generic, { status: 202 })
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return NextResponse.json(generic, { status: 202 })
     const user = await prisma.user.findUnique({ where: { email } })
-
-    if (user) {
-      // Invalidate existing tokens
-      await prisma.passwordResetToken.updateMany({
-        where: { userId: user.id, used: false },
-        data: { used: true },
-      })
-
-      const token = crypto.randomUUID()
-      await prisma.passwordResetToken.create({
-        data: {
-          token,
-          userId: user.id,
-          expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour
-        },
-      })
-
-      // In production, send email with reset link
-      console.log(`Password reset token for ${email}: ${token}`)
-      console.log(`Reset URL: ${process.env.NEXTAUTH_URL}/reset-password?token=${token}`)
+    if (user?.isActive) {
+      const token = issueAuthToken()
+      await prisma.$transaction([
+        prisma.passwordResetToken.updateMany({ where: { userId: user.id, used: false }, data: { used: true } }),
+        prisma.passwordResetToken.create({ data: { token: token.digest, userId: user.id, expiresAt: new Date(Date.now() + 60 * 60_000) } }),
+      ])
+      try {
+        const url = applicationUrl('/reset-password', token.raw)
+        await sendEmail({ to: user.email, subject: 'Reset your GetFirmFlow password', html: textEmailHtml(['A password reset was requested for your account.', `Open this one-time link within one hour: ${url}`, 'If you did not request this, no action is required.']) })
+      } catch (error) {
+        await prisma.passwordResetToken.updateMany({ where: { userId: user.id, token: token.digest }, data: { used: true } })
+        console.error('Password reset email delivery failed', error instanceof Error ? error.name : typeof error)
+      }
     }
-
-    return NextResponse.json({
-      message: 'If an account with that email exists, a password reset link has been sent.',
-    })
+    return NextResponse.json(generic, { status: 202 })
   } catch (error) {
-    console.error('Forgot password error:', error)
-    return NextResponse.json({ error: 'Failed to process request' }, { status: 500 })
+    console.error('Password reset request failed', error instanceof Error ? error.name : typeof error)
+    return NextResponse.json(generic, { status: 202 })
   }
 }

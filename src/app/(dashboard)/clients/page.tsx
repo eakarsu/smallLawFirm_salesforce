@@ -101,6 +101,8 @@ export default function ClientsPage() {
 
   useEffect(() => {
     fetchClients()
+    // The filter values below intentionally define when the request is refreshed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, statusFilter, typeFilter, page, limit, sortBy, sortOrder])
 
   const handleSort = (field: string) => {

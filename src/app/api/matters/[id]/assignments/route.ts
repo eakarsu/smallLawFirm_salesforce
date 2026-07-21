@@ -6,7 +6,7 @@ import prisma from '@/lib/prisma'
 // GET - List all assignments for a matter
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -15,7 +15,7 @@ export async function GET(
     }
 
     const assignments = await prisma.matterAssignment.findMany({
-      where: { matterId: params.id },
+      where: { matterId: (await params).id },
       include: {
         user: {
           select: {
@@ -41,7 +41,7 @@ export async function GET(
 // POST - Add a team member to a matter
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -54,7 +54,7 @@ export async function POST(
 
     // Check if matter exists
     const matter = await prisma.matter.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
     })
 
     if (!matter) {
@@ -73,7 +73,7 @@ export async function POST(
     // Check if assignment already exists
     const existingAssignment = await prisma.matterAssignment.findFirst({
       where: {
-        matterId: params.id,
+        matterId: (await params).id,
         userId: userId,
       },
     })
@@ -85,7 +85,7 @@ export async function POST(
     // Create assignment
     const assignment = await prisma.matterAssignment.create({
       data: {
-        matterId: params.id,
+        matterId: (await params).id,
         userId: userId,
         role: role || 'TEAM_MEMBER',
         hourlyRate: hourlyRate || user.hourlyRate,
@@ -112,7 +112,7 @@ export async function POST(
         type: 'TEAM_ASSIGNED',
         description: `Added ${user.firstName} ${user.lastName} to matter`,
         entityType: 'MATTER',
-        entityId: params.id,
+        entityId: (await params).id,
         metadata: {
           assignedUserId: userId,
           assignedUserName: `${user.firstName} ${user.lastName}`,
@@ -131,7 +131,7 @@ export async function POST(
 // DELETE - Remove a team member from a matter
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -148,7 +148,7 @@ export async function DELETE(
 
     const assignment = await prisma.matterAssignment.findFirst({
       where: {
-        matterId: params.id,
+        matterId: (await params).id,
         userId: userId,
       },
       include: {
@@ -172,7 +172,7 @@ export async function DELETE(
         type: 'TEAM_REMOVED',
         description: `Removed ${assignment.user.firstName} ${assignment.user.lastName} from matter`,
         entityType: 'MATTER',
-        entityId: params.id,
+        entityId: (await params).id,
         metadata: {
           removedUserId: userId,
           removedUserName: `${assignment.user.firstName} ${assignment.user.lastName}`,

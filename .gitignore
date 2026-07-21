@@ -49,6 +49,8 @@ out/
 
 # OS / IDE
 .DS_Store
+*.tsbuildinfo
+backups/
 .idea/
 .vscode/
 Thumbs.db

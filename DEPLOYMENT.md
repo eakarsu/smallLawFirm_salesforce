@@ -1,163 +1,40 @@
-# GetFirmFlow Deployment Guide
+# GetFirmFlow deployment runbook
 
-## Docker Deployment
+GetFirmFlow requires an externally managed PostgreSQL database and HTTPS provider gateways. Runtime startup is intentionally read-only with respect to source, dependencies, schema, seed data, and other processes.
 
-### 1. Build the Docker Image
+## Release sequence
 
-```bash
-docker build -t getfirmflow:latest .
-```
+1. Copy `.env.example` into the deployment platform and replace every required placeholder with a secret/runtime value. Never commit the resulting environment file.
+2. Run `npm ci`, `npm run verify`, and `npm run build` in CI.
+3. Back up the target database: `DATABASE_URL=... BACKUP_DATABASE_URL=... ./scripts/backup-database.sh /absolute/protected/backup/path`. `BACKUP_DATABASE_URL` may be omitted when the main URL is accepted directly by `pg_dump`; use it when the Prisma URL contains client-only parameters such as `schema`.
+4. Verify the output: `./scripts/verify-backup.sh /absolute/protected/backup/path/getfirmflow-....dump`.
+5. Run schema changes as an explicit release job: `DATABASE_URL=... ./scripts/release-migrate.sh`.
+6. Deploy the already-built artifact and run `./start.sh`, or build and run the Docker image. Startup does not install, build, migrate, seed, kill ports, or hide failures.
+7. Check `/api/health`, authenticate, and perform a provider preflight before enabling operator traffic.
 
-### 2. Run the Container
+Run the migration job once per release. `prisma migrate deploy` is safe to invoke again and reports already-applied migrations without replaying them.
 
-```bash
-docker run -d \
-  --name getfirmflow \
-  -p 3000:3000 \
-  -e DATABASE_URL="postgresql://user:password@host:5432/getfirmflow" \
-  -e NEXTAUTH_SECRET="your-secret-key-here" \
-  -e NEXTAUTH_URL="https://getfirmflow.com" \
-  -e OPENAI_API_KEY="your-openai-key" \
-  -v getfirmflow-uploads:/app/uploads \
-  --restart unless-stopped \
-  getfirmflow:latest
-```
+## Controlled bootstrap
 
-### 3. Environment Variables
+There is no public role-bearing registration. For an empty database only, provide all `BOOTSTRAP_*` values, set `ALLOW_BOOTSTRAP_SEED=true`, and run `npm run prisma:seed` manually. The seed refuses to delete data, refuses weak passwords, refuses an existing administrator identity, and never prints credentials. Turn the flag off immediately afterward.
 
-Required environment variables:
+## Revenue provider contract
 
-| Variable | Description |
-|----------|-------------|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `NEXTAUTH_SECRET` | Secret for NextAuth.js sessions |
-| `NEXTAUTH_URL` | Public URL of the application |
-| `OPENAI_API_KEY` | OpenAI API key for AI features |
+All `REVENUE_*_URL` values must use HTTPS and all tokens must contain at least 16 characters. The app requires provenance (`provider` and `reference`) for every provider decision. Email delivery additionally requires a digest of the human-reviewed content. Privacy is reevaluated immediately before send, regional consent is enforced, and opt-outs are written locally even if external propagation fails.
 
-Optional:
+## Recovery exercise
 
-| Variable | Description |
-|----------|-------------|
-| `SMTP_HOST` | SMTP server for emails |
-| `SMTP_PORT` | SMTP port (default: 587) |
-| `SMTP_USER` | SMTP username |
-| `SMTP_PASS` | SMTP password |
-| `STRIPE_SECRET_KEY` | Stripe API key for payments |
-
----
-
-## Nginx Configuration
-
-### 1. Install Certbot and obtain SSL certificate
+At least quarterly, verify a recent backup and restore it into an isolated empty database:
 
 ```bash
-sudo apt install certbot python3-certbot-nginx
-sudo certbot certonly --nginx -d getfirmflow.com -d www.getfirmflow.com
+createdb getfirmflow_restore_test
+pg_restore --no-owner --no-privileges --dbname postgresql://.../getfirmflow_restore_test /protected/path/getfirmflow-....dump
+psql postgresql://.../getfirmflow_restore_test -c 'SELECT COUNT(*) FROM "RevenueAuditEvent";'
+dropdb getfirmflow_restore_test
 ```
 
-### 2. Copy nginx configuration
+Use unique, explicitly named test databases and confirm their identity before removal. Never restore over the production database.
 
-```bash
-sudo cp nginx/getfirmflow.conf /etc/nginx/sites-available/getfirmflow
-sudo ln -s /etc/nginx/sites-available/getfirmflow /etc/nginx/sites-enabled/
-```
+## Rollback
 
-### 3. Test and reload nginx
-
-```bash
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
----
-
-## Database Setup
-
-### 1. Create PostgreSQL database
-
-```bash
-sudo -u postgres psql
-CREATE DATABASE getfirmflow;
-CREATE USER getfirmflow_user WITH ENCRYPTED PASSWORD 'your-password';
-GRANT ALL PRIVILEGES ON DATABASE getfirmflow TO getfirmflow_user;
-\q
-```
-
-### 2. Run migrations (inside container)
-
-```bash
-docker exec getfirmflow npx prisma migrate deploy
-```
-
-### 3. Seed database (optional, for demo data)
-
-```bash
-docker exec getfirmflow npx prisma db seed
-```
-
----
-
-## Quick Start Commands
-
-```bash
-# Build
-docker build -t getfirmflow:latest .
-
-# Run (development)
-docker run -d --name getfirmflow -p 3000:3000 \
-  -e DATABASE_URL="postgresql://postgres:password@host.docker.internal:5432/getfirmflow" \
-  -e NEXTAUTH_SECRET="dev-secret" \
-  -e NEXTAUTH_URL="http://localhost:3000" \
-  getfirmflow:latest
-
-# View logs
-docker logs -f getfirmflow
-
-# Stop
-docker stop getfirmflow
-
-# Remove
-docker rm getfirmflow
-
-# Shell access
-docker exec -it getfirmflow /bin/sh
-```
-
----
-
-## Health Check
-
-The application exposes a health check endpoint:
-
-```bash
-curl http://localhost:3000/api/health
-```
-
-Response:
-```json
-{
-  "status": "healthy",
-  "timestamp": "2024-01-01T00:00:00.000Z",
-  "database": "connected",
-  "version": "1.0.0"
-}
-```
-
----
-
-## Troubleshooting
-
-### Container won't start
-- Check logs: `docker logs getfirmflow`
-- Verify DATABASE_URL is correct
-- Ensure PostgreSQL is accessible from container
-
-### Database connection failed
-- Check if PostgreSQL is running
-- Verify network connectivity
-- Check firewall rules
-
-### Nginx 502 Bad Gateway
-- Verify container is running: `docker ps`
-- Check if port 3000 is exposed
-- Check container logs for errors
+Application rollback uses the previous immutable image. Prisma migrations in this repository are forward-only; do not improvise a destructive schema rollback. If a release must be reversed, stop writes, preserve a fresh backup, deploy the prior image if schema-compatible, and use a reviewed forward repair migration. A point-in-time database restore is an incident procedure and requires an explicitly approved recovery point.

@@ -5,7 +5,7 @@ import prisma from '@/lib/prisma'
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -19,7 +19,7 @@ export async function GET(
 
     // Get trust account
     const trustAccount = await prisma.trustAccount.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
       include: {
         client: true,
         matter: true,
@@ -37,7 +37,7 @@ export async function GET(
     // Get all transactions in the period
     const transactions = await prisma.trustTransaction.findMany({
       where: {
-        trustAccountId: params.id,
+        trustAccountId: (await params).id,
         createdAt: {
           gte: start,
           lte: end,
@@ -57,7 +57,7 @@ export async function GET(
     // Calculate opening balance (sum of all transactions before start date)
     const priorTransactions = await prisma.trustTransaction.aggregate({
       where: {
-        trustAccountId: params.id,
+        trustAccountId: (await params).id,
         createdAt: { lt: start },
       },
       _sum: { amount: true },
@@ -91,7 +91,7 @@ export async function GET(
     const matterBreakdown = await prisma.trustTransaction.groupBy({
       by: ['matterId'],
       where: {
-        trustAccountId: params.id,
+        trustAccountId: (await params).id,
       },
       _sum: { amount: true },
     })
@@ -200,7 +200,7 @@ export async function GET(
 // POST - Mark account as reconciled
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -216,7 +216,7 @@ export async function POST(
     }
 
     const trustAccount = await prisma.trustAccount.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
     })
 
     if (!trustAccount) {
@@ -228,7 +228,7 @@ export async function POST(
     // Create reconciliation record
     const reconciliation = await prisma.trustReconciliation.create({
       data: {
-        trustAccountId: params.id,
+        trustAccountId: (await params).id,
         firmId: session.user.firmId,
         reconciliationDate: reconciliationDate ? new Date(reconciliationDate) : new Date(),
         bookBalance: trustAccount.balance,
@@ -242,7 +242,7 @@ export async function POST(
 
     // Update trust account last reconciled date
     await prisma.trustAccount.update({
-      where: { id: params.id },
+      where: { id: (await params).id },
       data: {
         lastReconciledAt: new Date(),
       },
@@ -256,7 +256,7 @@ export async function POST(
         type: 'TRUST_RECONCILED',
         description: `Reconciled trust account ${trustAccount.accountNumber}`,
         entityType: 'TRUST_ACCOUNT',
-        entityId: params.id,
+        entityId: (await params).id,
         metadata: {
           bookBalance: trustAccount.balance,
           bankBalance,

@@ -7,7 +7,7 @@ import path from 'path'
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -19,7 +19,7 @@ export async function GET(
     const download = searchParams.get('download') === 'true'
 
     const document = await prisma.document.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
       include: {
         matter: { select: { id: true, name: true, matterNumber: true } },
         client: { select: { id: true, firstName: true, lastName: true, companyName: true, type: true } },
@@ -59,7 +59,7 @@ export async function GET(
 
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -70,7 +70,7 @@ export async function PUT(
     const body = await request.json()
 
     const document = await prisma.document.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
     })
 
     if (!document || document.firmId !== session.user.firmId) {
@@ -78,7 +78,7 @@ export async function PUT(
     }
 
     const updatedDocument = await prisma.document.update({
-      where: { id: params.id },
+      where: { id: (await params).id },
       data: {
         name: body.name,
         category: body.category,
@@ -101,7 +101,7 @@ export async function PUT(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -110,7 +110,7 @@ export async function DELETE(
     }
 
     const document = await prisma.document.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
     })
 
     if (!document || document.firmId !== session.user.firmId) {
@@ -127,7 +127,7 @@ export async function DELETE(
 
     // Delete database record
     await prisma.document.delete({
-      where: { id: params.id },
+      where: { id: (await params).id },
     })
 
     return NextResponse.json({ success: true })

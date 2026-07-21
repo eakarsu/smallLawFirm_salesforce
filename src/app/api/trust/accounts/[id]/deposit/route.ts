@@ -5,7 +5,7 @@ import prisma from '@/lib/prisma'
 
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -26,7 +26,7 @@ export async function POST(
 
     // Get trust account
     const trustAccount = await prisma.trustAccount.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
     })
 
     if (!trustAccount) {
@@ -36,7 +36,7 @@ export async function POST(
     // Find or create ledger
     let ledger = await prisma.trustLedger.findFirst({
       where: {
-        trustAccountId: params.id,
+        trustAccountId: (await params).id,
         clientId,
         matterId: matterId || null,
       },
@@ -45,7 +45,7 @@ export async function POST(
     if (!ledger) {
       ledger = await prisma.trustLedger.create({
         data: {
-          trustAccountId: params.id,
+          trustAccountId: (await params).id,
           clientId,
           matterId: matterId || null,
           balance: 0,
@@ -59,7 +59,7 @@ export async function POST(
     // Create transaction
     const transaction = await prisma.trustTransaction.create({
       data: {
-        trustAccountId: params.id,
+        trustAccountId: (await params).id,
         ledgerId: ledger.id,
         type: 'DEPOSIT',
         amount: amount,
@@ -80,7 +80,7 @@ export async function POST(
 
     // Update account balance
     await prisma.trustAccount.update({
-      where: { id: params.id },
+      where: { id: (await params).id },
       data: { balance: newAccountBalance },
     })
 
@@ -92,7 +92,7 @@ export async function POST(
         type: 'TRUST_DEPOSIT',
         description: `Deposited $${amount.toFixed(2)} to trust account`,
         entityType: 'TRUST_ACCOUNT',
-        entityId: params.id,
+        entityId: (await params).id,
         metadata: {
           amount,
           clientId,

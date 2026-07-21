@@ -5,7 +5,7 @@ import prisma from '@/lib/prisma'
 
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -16,7 +16,7 @@ export async function PUT(
     const body = await request.json()
 
     const existing = await prisma.deadline.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
       include: { matter: true },
     })
 
@@ -25,7 +25,7 @@ export async function PUT(
     }
 
     const deadline = await prisma.deadline.update({
-      where: { id: params.id },
+      where: { id: (await params).id },
       data: {
         title: body.title ?? existing.title,
         description: body.description ?? existing.description,
@@ -49,7 +49,7 @@ export async function PUT(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -58,7 +58,7 @@ export async function DELETE(
     }
 
     const existing = await prisma.deadline.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
       include: { matter: true },
     })
 
@@ -67,7 +67,7 @@ export async function DELETE(
     }
 
     await prisma.deadline.delete({
-      where: { id: params.id },
+      where: { id: (await params).id },
     })
 
     return NextResponse.json({ success: true })

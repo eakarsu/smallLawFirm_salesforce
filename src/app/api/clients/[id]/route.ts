@@ -6,7 +6,7 @@ import { encryptField, decryptField, maskSSN, maskEIN } from '@/lib/encryption'
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -15,7 +15,7 @@ export async function GET(
     }
 
     const client = await prisma.client.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
       include: {
         matters: {
           include: {
@@ -68,7 +68,7 @@ export async function GET(
 
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -80,7 +80,7 @@ export async function PUT(
 
     // Verify client belongs to firm
     const existing = await prisma.client.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
     })
 
     if (!existing || existing.firmId !== session.user.firmId) {
@@ -96,7 +96,7 @@ export async function PUT(
       : undefined
 
     const client = await prisma.client.update({
-      where: { id: params.id },
+      where: { id: (await params).id },
       data: {
         type: body.type,
         status: body.status,
@@ -130,7 +130,7 @@ export async function PUT(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -140,7 +140,7 @@ export async function DELETE(
 
     // Verify client belongs to firm
     const existing = await prisma.client.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
     })
 
     if (!existing || existing.firmId !== session.user.firmId) {
@@ -149,7 +149,7 @@ export async function DELETE(
 
     // Soft delete by setting status to ARCHIVED
     await prisma.client.update({
-      where: { id: params.id },
+      where: { id: (await params).id },
       data: { status: 'ARCHIVED' },
     })
 

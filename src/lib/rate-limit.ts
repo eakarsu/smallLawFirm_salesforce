@@ -22,7 +22,7 @@ export function rateLimiter(
 }
 
 // Clean up expired entries periodically
-setInterval(() => {
+const cleanupTimer = setInterval(() => {
   const now = Date.now()
   for (const [key, value] of Array.from(rateLimit.entries())) {
     if (now > value.resetTime) {
@@ -30,3 +30,4 @@ setInterval(() => {
     }
   }
 }, 60 * 1000)
+cleanupTimer.unref?.()

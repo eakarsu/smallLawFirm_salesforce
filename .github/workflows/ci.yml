@@ -1,0 +1,74 @@
+name: verify
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  application:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-${{ github.run_id }}-${{ github.run_attempt }}
+          POSTGRES_DB: getfirmflow_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d getfirmflow_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:ci-${{ github.run_id }}-${{ github.run_attempt }}@127.0.0.1:5432/getfirmflow_test?schema=public
+      BACKUP_DATABASE_URL: postgresql://postgres:ci-${{ github.run_id }}-${{ github.run_attempt }}@127.0.0.1:5432/getfirmflow_test
+      POSTGRES_ADMIN_URL: postgresql://postgres:ci-${{ github.run_id }}-${{ github.run_attempt }}@127.0.0.1:5432/postgres
+      NEXTAUTH_URL: http://127.0.0.1:3000
+      NEXTAUTH_SECRET: ci-nextauth-${{ github.run_id }}-${{ github.run_attempt }}-longer-than-thirty-two-characters
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run prisma:generate
+      - run: npx prisma validate
+      - name: Apply migrations twice
+        run: |
+          npx prisma migrate deploy
+          npx prisma migrate deploy
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test:unit
+      - run: npm run test:startup
+      - run: npm run test:integration
+      - run: npm run test:e2e
+      - run: npm run build
+      - run: npm run audit:prod
+      - name: Verify backup and isolated restore
+        run: |
+          backup_dir="$(mktemp -d)"
+          backup_path="$(./scripts/backup-database.sh "$backup_dir")"
+          ./scripts/verify-backup.sh "$backup_path"
+          restore_url="${BACKUP_DATABASE_URL/getfirmflow_test/getfirmflow_restore}"
+          createdb --maintenance-db="$POSTGRES_ADMIN_URL" getfirmflow_restore
+          pg_restore --no-owner --no-privileges --dbname "$restore_url" "$backup_path"
+          test "$(psql "$restore_url" -Atc 'SELECT COUNT(*) FROM "_prisma_migrations";')" -ge 4
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

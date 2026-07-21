@@ -156,6 +156,7 @@ export default function DocumentDetailPage() {
                     title={document.name}
                   />
                 ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={document.url}
                     alt={document.name}

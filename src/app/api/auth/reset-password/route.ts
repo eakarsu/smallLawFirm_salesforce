@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import prisma from '@/lib/prisma'
 import { validatePasswordStrength } from '@/lib/password-validation'
+import { digestAuthToken } from '@/lib/auth-tokens'
 
 export async function POST(request: Request) {
   try {
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
     }
 
     const resetToken = await prisma.passwordResetToken.findUnique({
-      where: { token },
+      where: { token: digestAuthToken(token) },
       include: { user: true },
     })
 
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid or expired reset token' }, { status: 400 })
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10)
+    const hashedPassword = await bcrypt.hash(password, 12)
 
     await prisma.$transaction([
       prisma.user.update({

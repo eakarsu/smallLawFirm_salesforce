@@ -59,7 +59,7 @@ export default function UsersSettingsPage() {
     email: "",
     firstName: "",
     lastName: "",
-    role: "ASSOCIATE",
+    role: "ATTORNEY",
     hourlyRate: "",
     phone: "",
     barNumber: "",
@@ -104,7 +104,7 @@ export default function UsersSettingsPage() {
           email: "",
           firstName: "",
           lastName: "",
-          role: "ASSOCIATE",
+          role: "ATTORNEY",
           hourlyRate: "",
           phone: "",
           barNumber: "",
@@ -164,10 +164,10 @@ export default function UsersSettingsPage() {
     const colors: Record<string, string> = {
       ADMIN: "bg-red-100 text-red-800",
       PARTNER: "bg-purple-100 text-purple-800",
-      ASSOCIATE: "bg-blue-100 text-blue-800",
+      ATTORNEY: "bg-blue-100 text-blue-800",
       PARALEGAL: "bg-green-100 text-green-800",
       SECRETARY: "bg-gray-100 text-gray-800",
-      BILLING: "bg-amber-100 text-amber-800",
+      BOOKKEEPER: "bg-amber-100 text-amber-800",
     }
     return colors[role] || colors.SECRETARY
   }
@@ -175,10 +175,10 @@ export default function UsersSettingsPage() {
   const roles = [
     { value: "ADMIN", label: "Admin" },
     { value: "PARTNER", label: "Partner" },
-    { value: "ASSOCIATE", label: "Associate" },
+    { value: "ATTORNEY", label: "Attorney" },
     { value: "PARALEGAL", label: "Paralegal" },
     { value: "SECRETARY", label: "Secretary" },
-    { value: "BILLING", label: "Billing" },
+    { value: "BOOKKEEPER", label: "Bookkeeper" },
   ]
 
   return (
@@ -197,7 +197,7 @@ export default function UsersSettingsPage() {
               email: "",
               firstName: "",
               lastName: "",
-              role: "ASSOCIATE",
+              role: "ATTORNEY",
               hourlyRate: "",
               phone: "",
               barNumber: "",

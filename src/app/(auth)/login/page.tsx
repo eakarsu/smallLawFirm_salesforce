@@ -42,11 +42,6 @@ export default function LoginPage() {
     }
   }
 
-  const handleDemoLogin = () => {
-    setEmail('john.smith@smithlaw.com')
-    setPassword('password123')
-  }
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-blue-50">
       {/* Back to home link */}
@@ -110,32 +105,14 @@ export default function LoginPage() {
               {loading ? "Signing in..." : "Sign in"}
             </Button>
             <p className="text-sm text-center text-muted-foreground">
-              Don&apos;t have an account?{" "}
-              <Link href="/register" className="text-blue-600 hover:underline">
-                Start free trial
+              Need an account?{" "}
+              <Link href="/contact" className="text-blue-600 hover:underline">
+                Contact your firm administrator
               </Link>
             </p>
           </CardFooter>
         </form>
       </Card>
-
-      {/* Demo account hint - cleaner design */}
-      <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2">
-        <div className="bg-white rounded-lg shadow-lg border border-slate-200 p-4 max-w-sm">
-          <p className="text-sm font-medium text-slate-700 mb-2">Want to explore first?</p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleDemoLogin}
-            className="w-full"
-          >
-            Try Demo Account
-          </Button>
-          <p className="text-xs text-slate-500 mt-2 text-center">
-            No signup required • Full access to all features
-          </p>
-        </div>
-      </div>
     </div>
   )
 }

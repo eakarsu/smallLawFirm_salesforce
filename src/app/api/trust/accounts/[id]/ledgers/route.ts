@@ -5,7 +5,7 @@ import prisma from '@/lib/prisma'
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -14,7 +14,7 @@ export async function GET(
     }
 
     const ledgers = await prisma.trustLedger.findMany({
-      where: { trustAccountId: params.id },
+      where: { trustAccountId: (await params).id },
       include: {
         client: { select: { id: true, displayName: true, clientNumber: true } },
         matter: { select: { id: true, title: true, matterNumber: true } },

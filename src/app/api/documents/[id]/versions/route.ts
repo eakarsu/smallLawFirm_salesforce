@@ -8,7 +8,7 @@ import path from 'path'
 // GET - List all versions of a document
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -17,7 +17,7 @@ export async function GET(
     }
 
     const document = await prisma.document.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
       include: {
         versions: {
           include: {
@@ -49,7 +49,7 @@ export async function GET(
 // POST - Upload a new version
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -67,7 +67,7 @@ export async function POST(
 
     // Get the existing document
     const document = await prisma.document.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
     })
 
     if (!document) {
@@ -76,14 +76,14 @@ export async function POST(
 
     // Calculate new version number
     const latestVersion = await prisma.documentVersion.findFirst({
-      where: { documentId: params.id },
+      where: { documentId: (await params).id },
       orderBy: { versionNumber: 'desc' },
     })
 
     const newVersionNumber = (latestVersion?.versionNumber || document.version || 1) + 1
 
     // Save file to uploads directory
-    const uploadsDir = path.join(process.cwd(), 'uploads', 'documents', params.id)
+    const uploadsDir = path.join(process.cwd(), 'uploads', 'documents', (await params).id)
     await mkdir(uploadsDir, { recursive: true })
 
     const ext = path.extname(file.name)
@@ -97,7 +97,7 @@ export async function POST(
     // Create version record
     const version = await prisma.documentVersion.create({
       data: {
-        documentId: params.id,
+        documentId: (await params).id,
         versionNumber: newVersionNumber,
         filePath: filePath,
         fileSize: file.size,
@@ -113,7 +113,7 @@ export async function POST(
 
     // Update main document version number
     await prisma.document.update({
-      where: { id: params.id },
+      where: { id: (await params).id },
       data: {
         version: newVersionNumber,
         fileSize: file.size,
@@ -130,7 +130,7 @@ export async function POST(
         type: 'DOCUMENT_VERSION',
         description: `Uploaded version ${newVersionNumber} of ${document.name}`,
         entityType: 'DOCUMENT',
-        entityId: params.id,
+        entityId: (await params).id,
         metadata: {
           versionNumber: newVersionNumber,
           comment: comment,
@@ -149,7 +149,7 @@ export async function POST(
 // PUT - Restore a specific version
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -165,7 +165,7 @@ export async function PUT(
     }
 
     const document = await prisma.document.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
     })
 
     if (!document) {
@@ -174,7 +174,7 @@ export async function PUT(
 
     const version = await prisma.documentVersion.findFirst({
       where: {
-        documentId: params.id,
+        documentId: (await params).id,
         versionNumber: versionNumber,
       },
     })
@@ -185,7 +185,7 @@ export async function PUT(
 
     // Create a new version based on the old one (restoration)
     const latestVersion = await prisma.documentVersion.findFirst({
-      where: { documentId: params.id },
+      where: { documentId: (await params).id },
       orderBy: { versionNumber: 'desc' },
     })
 
@@ -194,7 +194,7 @@ export async function PUT(
     // Create restoration version record
     await prisma.documentVersion.create({
       data: {
-        documentId: params.id,
+        documentId: (await params).id,
         versionNumber: newVersionNumber,
         filePath: version.filePath,
         fileSize: version.fileSize,
@@ -205,7 +205,7 @@ export async function PUT(
 
     // Update main document
     await prisma.document.update({
-      where: { id: params.id },
+      where: { id: (await params).id },
       data: {
         version: newVersionNumber,
         filePath: version.filePath,
@@ -222,7 +222,7 @@ export async function PUT(
         type: 'DOCUMENT_RESTORED',
         description: `Restored ${document.name} to version ${versionNumber}`,
         entityType: 'DOCUMENT',
-        entityId: params.id,
+        entityId: (await params).id,
         metadata: {
           restoredFromVersion: versionNumber,
           newVersion: newVersionNumber,

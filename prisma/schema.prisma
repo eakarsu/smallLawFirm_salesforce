@@ -48,6 +48,8 @@ model User {
   emailVerified Boolean   @default(false)
   passwordResetTokens PasswordResetToken[]
   emailVerificationTokens EmailVerificationToken[]
+  revenueProspectsOwned RevenueProspect[] @relation("RevenueProspectOwner")
+  revenueProspectsCreated RevenueProspect[] @relation("RevenueProspectCreator")
 }
 
 enum UserRole {
@@ -93,6 +95,84 @@ model Firm {
   emailLogs     EmailLog[]
   payments      Payment[]
   calendarEvents CalendarEvent[]
+  revenueProspects RevenueProspect[]
+  revenueSuppressions RevenueSuppression[]
+}
+
+// ============ GOVERNED REVENUE OPERATIONS ============
+
+model RevenueProspect {
+  id              String   @id @default(cuid())
+  firmId          String
+  firm            Firm     @relation(fields: [firmId], references: [id], onDelete: Restrict)
+  createdById     String
+  createdBy       User     @relation("RevenueProspectCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  ownerId         String?
+  owner           User?    @relation("RevenueProspectOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  normalizedEmail String
+  crmProvider     String?
+  externalId      String?
+  lifecycle       String
+  version         Int      @default(1)
+  state           Json
+  retryAt         DateTime?
+  linkedClientId  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  deliveries      RevenueDeliveryEvidence[]
+  auditEvents     RevenueAuditEvent[]
+
+  @@unique([firmId, normalizedEmail])
+  @@unique([firmId, crmProvider, externalId])
+  @@index([firmId, lifecycle, ownerId])
+}
+
+model RevenueSuppression {
+  id               String   @id @default(cuid())
+  firmId           String
+  firm             Firm     @relation(fields: [firmId], references: [id], onDelete: Restrict)
+  normalizedEmail  String
+  reason           String
+  source           String
+  externalReference String?
+  occurredAt       DateTime
+  createdAt        DateTime @default(now())
+
+  @@unique([firmId, normalizedEmail])
+  @@index([firmId, occurredAt])
+}
+
+model RevenueDeliveryEvidence {
+  id             String   @id @default(cuid())
+  prospectId     String
+  prospect       RevenueProspect @relation(fields: [prospectId], references: [id], onDelete: Restrict)
+  provider       String
+  reference      String
+  idempotencyKey String   @unique
+  contentHash    String
+  consentReference String
+  sentAt         DateTime
+  createdAt      DateTime @default(now())
+
+  @@index([prospectId, sentAt])
+}
+
+model RevenueAuditEvent {
+  id           String   @id @default(cuid())
+  prospectId   String
+  prospect     RevenueProspect @relation(fields: [prospectId], references: [id], onDelete: Restrict)
+  firmId       String
+  sequence     Int
+  actorId      String
+  action       String
+  payload      Json
+  previousHash String
+  eventHash    String   @unique
+  createdAt    DateTime @default(now())
+
+  @@unique([prospectId, sequence])
+  @@index([firmId, prospectId, sequence])
 }
 
 // ============ CLIENTS ============

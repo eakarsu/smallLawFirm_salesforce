@@ -5,7 +5,7 @@ import prisma from '@/lib/prisma'
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -14,7 +14,7 @@ export async function GET(
     }
 
     const matter = await prisma.matter.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
       include: {
         client: true,
         practiceArea: true,
@@ -70,12 +70,12 @@ export async function GET(
 
     // Calculate totals
     const unbilledTime = await prisma.timeEntry.aggregate({
-      where: { matterId: params.id, billable: true, billed: false },
+      where: { matterId: (await params).id, billable: true, billed: false },
       _sum: { hours: true, amount: true },
     })
 
     const billedAmount = await prisma.invoice.aggregate({
-      where: { matterId: params.id, status: { in: ['SENT', 'PARTIAL', 'PAID'] } },
+      where: { matterId: (await params).id, status: { in: ['SENT', 'PARTIAL', 'PAID'] } },
       _sum: { totalAmount: true, paidAmount: true },
     })
 
@@ -96,7 +96,7 @@ export async function GET(
 
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -107,7 +107,7 @@ export async function PUT(
     const body = await request.json()
 
     const existing = await prisma.matter.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
     })
 
     if (!existing || existing.firmId !== session.user.firmId) {
@@ -115,7 +115,7 @@ export async function PUT(
     }
 
     const matter = await prisma.matter.update({
-      where: { id: params.id },
+      where: { id: (await params).id },
       data: {
         name: body.name,
         description: body.description,
@@ -144,7 +144,7 @@ export async function PUT(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -153,7 +153,7 @@ export async function DELETE(
     }
 
     const existing = await prisma.matter.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
     })
 
     if (!existing || existing.firmId !== session.user.firmId) {
@@ -161,7 +161,7 @@ export async function DELETE(
     }
 
     await prisma.matter.update({
-      where: { id: params.id },
+      where: { id: (await params).id },
       data: { status: 'ARCHIVED' },
     })
 

@@ -5,7 +5,7 @@ import prisma from '@/lib/prisma'
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -14,7 +14,7 @@ export async function GET(
     }
 
     const contact = await prisma.contact.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
       include: {
         client: { select: { id: true, firstName: true, lastName: true, companyName: true, type: true } },
       },
@@ -33,7 +33,7 @@ export async function GET(
 
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -42,7 +42,7 @@ export async function PUT(
     }
 
     const existing = await prisma.contact.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
     })
 
     if (!existing || existing.firmId !== session.user.firmId) {
@@ -52,7 +52,7 @@ export async function PUT(
     const body = await request.json()
 
     const contact = await prisma.contact.update({
-      where: { id: params.id },
+      where: { id: (await params).id },
       data: {
         type: body.type,
         firstName: body.firstName,
@@ -78,7 +78,7 @@ export async function PUT(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -87,7 +87,7 @@ export async function DELETE(
     }
 
     const existing = await prisma.contact.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
     })
 
     if (!existing || existing.firmId !== session.user.firmId) {
@@ -95,7 +95,7 @@ export async function DELETE(
     }
 
     await prisma.contact.delete({
-      where: { id: params.id },
+      where: { id: (await params).id },
     })
 
     return NextResponse.json({ success: true })

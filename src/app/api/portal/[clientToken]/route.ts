@@ -17,10 +17,10 @@ import prisma from '@/lib/prisma'
 
 export async function GET(
   request: Request,
-  { params }: { params: { clientToken: string } }
+  { params }: { params: Promise<{ clientToken: string }> }
 ) {
   try {
-    const { clientToken } = params
+    const { clientToken } = await params
 
     if (!clientToken || clientToken.length < 32) {
       return NextResponse.json({ error: 'Invalid portal token' }, { status: 400 })

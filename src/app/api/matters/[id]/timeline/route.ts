@@ -5,7 +5,7 @@ import prisma from '@/lib/prisma'
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -14,7 +14,7 @@ export async function GET(
     }
 
     const matter = await prisma.matter.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
     })
 
     if (!matter) {
@@ -25,19 +25,19 @@ export async function GET(
     const [timeEntries, documents, deadlines, activities, invoices] = await Promise.all([
       // Time entries
       prisma.timeEntry.findMany({
-        where: { matterId: params.id },
+        where: { matterId: (await params).id },
         include: { user: { select: { firstName: true, lastName: true } } },
         orderBy: { date: 'desc' },
       }),
       // Documents
       prisma.document.findMany({
-        where: { matterId: params.id },
+        where: { matterId: (await params).id },
         include: { uploadedBy: { select: { firstName: true, lastName: true } } },
         orderBy: { createdAt: 'desc' },
       }),
       // Deadlines
       prisma.deadline.findMany({
-        where: { matterId: params.id },
+        where: { matterId: (await params).id },
         include: { assignedTo: { select: { firstName: true, lastName: true } } },
         orderBy: { dueDate: 'desc' },
       }),
@@ -45,14 +45,14 @@ export async function GET(
       prisma.activity.findMany({
         where: {
           entityType: 'MATTER',
-          entityId: params.id,
+          entityId: (await params).id,
         },
         include: { user: { select: { firstName: true, lastName: true } } },
         orderBy: { createdAt: 'desc' },
       }),
       // Invoices
       prisma.invoice.findMany({
-        where: { matterId: params.id },
+        where: { matterId: (await params).id },
         orderBy: { createdAt: 'desc' },
       }),
     ])
@@ -150,7 +150,7 @@ export async function GET(
     timeline.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
     return NextResponse.json({
-      matterId: params.id,
+      matterId: (await params).id,
       matterTitle: matter.title,
       timeline,
       summary: {

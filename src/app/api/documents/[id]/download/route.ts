@@ -7,7 +7,7 @@ import path from 'path'
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -19,7 +19,7 @@ export async function GET(
     const versionNumber = searchParams.get('version')
 
     const document = await prisma.document.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
       include: {
         versions: versionNumber ? {
           where: { versionNumber: parseInt(versionNumber) },

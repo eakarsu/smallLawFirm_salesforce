@@ -5,7 +5,7 @@ import prisma from '@/lib/prisma'
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -14,7 +14,7 @@ export async function GET(
     }
 
     const entry = await prisma.timeEntry.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
       include: {
         matter: { select: { id: true, name: true, matterNumber: true } },
         user: { select: { firstName: true, lastName: true } },
@@ -35,7 +35,7 @@ export async function GET(
 
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -56,7 +56,7 @@ export async function PUT(
     const amount = hours * rate
 
     const entry = await prisma.timeEntry.update({
-      where: { id: params.id },
+      where: { id: (await params).id },
       data: {
         matterId: body.matterId,
         date: new Date(body.date),
@@ -83,7 +83,7 @@ export async function PUT(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -92,7 +92,7 @@ export async function DELETE(
     }
 
     await prisma.timeEntry.delete({
-      where: { id: params.id },
+      where: { id: (await params).id },
     })
 
     return NextResponse.json({ success: true })

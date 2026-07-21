@@ -136,6 +136,8 @@ export default function InvoiceDetailPage() {
 
   useEffect(() => {
     fetchInvoice()
+    // The invoice identity intentionally defines when the request is refreshed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id])
 
   const fetchInvoice = async () => {

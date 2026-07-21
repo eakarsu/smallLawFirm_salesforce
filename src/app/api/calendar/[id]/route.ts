@@ -5,7 +5,7 @@ import prisma from '@/lib/prisma'
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -14,7 +14,7 @@ export async function GET(
     }
 
     const event = await prisma.calendarEvent.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
       include: {
         matter: { select: { id: true, name: true, matterNumber: true } },
         attendees: {
@@ -38,7 +38,7 @@ export async function GET(
 
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -47,7 +47,7 @@ export async function PUT(
     }
 
     const existing = await prisma.calendarEvent.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
     })
 
     if (!existing || existing.firmId !== session.user.firmId) {
@@ -57,7 +57,7 @@ export async function PUT(
     const body = await request.json()
 
     const event = await prisma.calendarEvent.update({
-      where: { id: params.id },
+      where: { id: (await params).id },
       data: {
         title: body.title,
         description: body.description || null,
@@ -86,7 +86,7 @@ export async function PUT(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -95,7 +95,7 @@ export async function DELETE(
     }
 
     const existing = await prisma.calendarEvent.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
     })
 
     if (!existing || existing.firmId !== session.user.firmId) {
@@ -104,12 +104,12 @@ export async function DELETE(
 
     // Delete attendees first
     await prisma.eventAttendee.deleteMany({
-      where: { eventId: params.id },
+      where: { eventId: (await params).id },
     })
 
     // Delete the event
     await prisma.calendarEvent.delete({
-      where: { id: params.id },
+      where: { id: (await params).id },
     })
 
     return NextResponse.json({ success: true })

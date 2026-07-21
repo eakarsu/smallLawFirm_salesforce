@@ -9,10 +9,10 @@ export function validatePasswordStrength(password: string): PasswordStrength {
   const suggestions: string[] = []
   let score = 0
 
-  if (password.length >= 8) score++
-  else suggestions.push('Use at least 8 characters')
-
   if (password.length >= 12) score++
+  else suggestions.push('Use at least 12 characters')
+
+  if (password.length >= 16) score++
 
   if (/[A-Z]/.test(password)) score++
   else suggestions.push('Add uppercase letters')
@@ -45,6 +45,6 @@ export function validatePasswordStrength(password: string): PasswordStrength {
     score: clampedScore,
     label: labels[clampedScore],
     suggestions,
-    isValid: clampedScore >= 2 && password.length >= 8,
+    isValid: password.length >= 12 && /[A-Z]/.test(password) && /[a-z]/.test(password) && /[0-9]/.test(password) && /[^A-Za-z0-9]/.test(password) && !/^(password|123456|qwerty|admin)/i.test(password),
   }
 }

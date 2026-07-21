@@ -5,7 +5,7 @@ import prisma from '@/lib/prisma'
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -14,7 +14,7 @@ export async function GET(
     }
 
     const invoice = await prisma.invoice.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
       include: {
         matter: {
           select: {
@@ -50,7 +50,7 @@ export async function GET(
 
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -61,7 +61,7 @@ export async function PUT(
     const body = await request.json()
 
     const existing = await prisma.invoice.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
     })
 
     if (!existing || existing.firmId !== session.user.firmId) {
@@ -69,7 +69,7 @@ export async function PUT(
     }
 
     const invoice = await prisma.invoice.update({
-      where: { id: params.id },
+      where: { id: (await params).id },
       data: {
         status: body.status ?? existing.status,
         dueDate: body.dueDate ? new Date(body.dueDate) : existing.dueDate,

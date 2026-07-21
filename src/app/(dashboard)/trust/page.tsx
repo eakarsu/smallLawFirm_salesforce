@@ -533,7 +533,7 @@ export default function TrustAccountingPage() {
             <div>
               <h4 className="font-medium text-amber-800">Trust Account Compliance Reminder</h4>
               <p className="text-sm text-amber-700 mt-1">
-                Ensure all trust account transactions comply with your jurisdiction's IOLTA/IOLA rules.
+                Ensure all trust account transactions comply with your jurisdiction&apos;s IOLTA/IOLA rules.
                 Client funds must be kept separate from operating funds. Regular reconciliation is required.
               </p>
             </div>

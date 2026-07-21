@@ -16,7 +16,7 @@ interface ConflictResult {
 
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -29,7 +29,7 @@ export async function POST(
 
     // Get the client being checked
     const client = await prisma.client.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
       include: {
         contacts: true,
       },
@@ -46,7 +46,7 @@ export async function POST(
       const otherClients = await prisma.client.findMany({
         where: {
           firmId: session.user.firmId,
-          id: { not: params.id },
+          id: { not: (await params).id },
           OR: [
             { displayName: { contains: client.displayName, mode: 'insensitive' } },
             { email: client.email ? { equals: client.email, mode: 'insensitive' } : undefined },
@@ -80,7 +80,7 @@ export async function POST(
       const matters = await prisma.matter.findMany({
         where: {
           firmId: session.user.firmId,
-          clientId: { not: params.id },
+          clientId: { not: (await params).id },
           OR: [
             { opposingParty: { contains: client.displayName, mode: 'insensitive' } },
             { opposingCounsel: { contains: client.displayName, mode: 'insensitive' } },
@@ -114,7 +114,7 @@ export async function POST(
       const contacts = await prisma.contact.findMany({
         where: {
           firmId: session.user.firmId,
-          clientId: { not: params.id },
+          clientId: { not: (await params).id },
           OR: [
             { firstName: { contains: client.displayName.split(' ')[0], mode: 'insensitive' } },
             { lastName: { contains: client.displayName.split(' ').slice(-1)[0], mode: 'insensitive' } },

@@ -6,7 +6,7 @@ import prisma from '@/lib/prisma'
 // GET - List payments for an invoice
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -15,7 +15,7 @@ export async function GET(
     }
 
     const payments = await prisma.payment.findMany({
-      where: { invoiceId: params.id },
+      where: { invoiceId: (await params).id },
       include: {
         recordedBy: {
           select: { firstName: true, lastName: true },
@@ -34,7 +34,7 @@ export async function GET(
 // POST - Record a payment
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -51,7 +51,7 @@ export async function POST(
 
     // Get the invoice
     const invoice = await prisma.invoice.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
       include: {
         matter: {
           include: {
@@ -112,7 +112,7 @@ export async function POST(
     const payment = await prisma.payment.create({
       data: {
         firmId: session.user.firmId,
-        invoiceId: params.id,
+        invoiceId: (await params).id,
         amount: amount,
         paymentMethod: paymentMethod || 'CHECK',
         paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
@@ -130,7 +130,7 @@ export async function POST(
     const newStatus = newBalanceDue <= 0 ? 'PAID' : 'PARTIAL'
 
     await prisma.invoice.update({
-      where: { id: params.id },
+      where: { id: (await params).id },
       data: {
         paidAmount: newPaidAmount,
         balanceDue: newBalanceDue,
@@ -147,7 +147,7 @@ export async function POST(
         type: 'PAYMENT_RECEIVED',
         description: `Received $${amount.toFixed(2)} payment for Invoice ${invoice.invoiceNumber}`,
         entityType: 'INVOICE',
-        entityId: params.id,
+        entityId: (await params).id,
         metadata: {
           amount,
           paymentMethod,
@@ -177,7 +177,7 @@ export async function POST(
 // DELETE - Void a payment
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -203,7 +203,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Payment not found' }, { status: 404 })
     }
 
-    if (payment.invoiceId !== params.id) {
+    if (payment.invoiceId !== (await params).id) {
       return NextResponse.json({ error: 'Payment does not belong to this invoice' }, { status: 400 })
     }
 
@@ -216,7 +216,7 @@ export async function DELETE(
     // Recalculate invoice amounts (excluding voided payments)
     const validPayments = await prisma.payment.findMany({
       where: {
-        invoiceId: params.id,
+        invoiceId: (await params).id,
         status: 'COMPLETED',
       },
     })
@@ -227,7 +227,7 @@ export async function DELETE(
                       newBalanceDue <= 0 ? 'PAID' : 'PARTIAL'
 
     await prisma.invoice.update({
-      where: { id: params.id },
+      where: { id: (await params).id },
       data: {
         paidAmount: newPaidAmount,
         balanceDue: newBalanceDue,
@@ -244,7 +244,7 @@ export async function DELETE(
         type: 'PAYMENT_VOIDED',
         description: `Voided $${payment.amount.toFixed(2)} payment for Invoice ${payment.invoice.invoiceNumber}`,
         entityType: 'INVOICE',
-        entityId: params.id,
+        entityId: (await params).id,
         metadata: {
           paymentId,
           amount: payment.amount,
@@ -258,7 +258,7 @@ export async function DELETE(
       success: true,
       message: 'Payment voided successfully',
       invoice: {
-        id: params.id,
+        id: (await params).id,
         paidAmount: newPaidAmount,
         balanceDue: newBalanceDue,
         status: newStatus,

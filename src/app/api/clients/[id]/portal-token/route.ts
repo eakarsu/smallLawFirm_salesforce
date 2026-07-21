@@ -11,7 +11,7 @@ import crypto from 'crypto'
 
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -27,7 +27,7 @@ export async function POST(
 
     // Confirm client belongs to the firm
     const client = await prisma.client.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
       select: {
         id: true,
         firmId: true,
@@ -60,7 +60,7 @@ export async function POST(
     const token = crypto.randomBytes(32).toString('hex')
 
     const updated = await prisma.client.update({
-      where: { id: params.id },
+      where: { id: (await params).id },
       data: {
         portalToken: token,
         portalEnabled: true,
@@ -96,7 +96,7 @@ export async function POST(
  */
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -110,7 +110,7 @@ export async function DELETE(
     }
 
     const client = await prisma.client.findUnique({
-      where: { id: params.id },
+      where: { id: (await params).id },
       select: { firmId: true },
     })
 
@@ -119,7 +119,7 @@ export async function DELETE(
     }
 
     await prisma.client.update({
-      where: { id: params.id },
+      where: { id: (await params).id },
       data: { portalToken: null, portalEnabled: false },
     })
 

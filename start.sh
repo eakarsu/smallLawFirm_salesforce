@@ -1,50 +1,22 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-echo "Starting Small Law Firm AI..."
+project_dir="$(cd "$(dirname "$0")" && pwd)"
+source_dir="${RUNTIME_PROJECT_SOURCE:-$project_dir}"
 
-# Check if node_modules exists
-if [ ! -d "node_modules" ]; then
-    echo "Installing dependencies..."
-    npm install
-fi
+: "${DATABASE_URL:?DATABASE_URL is required}"
+: "${NEXTAUTH_SECRET:?NEXTAUTH_SECRET is required}"
+if (( ${#NEXTAUTH_SECRET} < 32 )); then echo "NEXTAUTH_SECRET must contain at least 32 characters" >&2; exit 1; fi
+if [[ "$NEXTAUTH_SECRET" =~ ^(your-secret|change-me|dev-secret|replace-with) ]]; then echo "NEXTAUTH_SECRET must not be a placeholder" >&2; exit 1; fi
+if [[ ! "$DATABASE_URL" =~ ^postgres(ql)?:// ]]; then echo "DATABASE_URL must be a PostgreSQL URL" >&2; exit 1; fi
+if [[ ! -d "$source_dir/node_modules" ]]; then echo "Dependencies are missing; run npm ci during deployment" >&2; exit 1; fi
+if [[ ! -f "$source_dir/.next/BUILD_ID" ]]; then echo "Production build is missing; run npm run build during deployment" >&2; exit 1; fi
 
-# Check if .env exists
-if [ ! -f ".env" ]; then
-    echo "Creating .env file..."
-    cp .env.example .env
-    echo "Please update .env with your database credentials"
-    exit 1
-fi
+: "${PORT:?PORT is required; choose an unused port explicitly}"
+app_port="$PORT"
+if [[ ! "$app_port" =~ ^[0-9]+$ ]] || (( app_port < 1 || app_port > 65535 )); then echo "PORT is invalid" >&2; exit 1; fi
+if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"$app_port" -sTCP:LISTEN >/dev/null 2>&1; then echo "Port $app_port is already occupied; refusing to terminate another process" >&2; exit 1; fi
 
-# Create uploads directory if it doesn't exist
-if [ ! -d "uploads" ]; then
-    echo "Creating uploads directory..."
-    mkdir -p uploads
-fi
-
-# Generate Prisma client
-echo "Generating Prisma client..."
-npx prisma generate
-
-# Run migrations
-echo "Running database migrations..."
-npx prisma migrate deploy 2>/dev/null || npx prisma migrate dev --name init
-
-# Check if database needs seeding by checking User table
-echo "Checking if database needs seeding..."
-USER_COUNT=$(npx prisma db execute --stdin <<< "SELECT COUNT(*) as count FROM \"User\";" 2>/dev/null | grep -o '[0-9]*' | head -1 || echo "0")
-
-if [ "$USER_COUNT" = "0" ] || [ -z "$USER_COUNT" ]; then
-    echo "Seeding database..."
-    npx prisma db seed
-fi
-
-# Clear ports 3000 and 4000 if in use
-echo "Clearing ports 3000 and 4000..."
-lsof -ti:3000 | xargs kill -9 2>/dev/null || true
-lsof -ti:4000 | xargs kill -9 2>/dev/null || true
-
-# Start the development server
-echo "Starting Next.js development server..."
-echo "Application will be available at http://localhost:3000"
-npm run dev
+cd "$source_dir"
+export NODE_ENV=production
+exec npm start -- --hostname "${APP_HOST:-127.0.0.1}" --port "$app_port"
