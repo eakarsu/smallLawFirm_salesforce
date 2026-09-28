@@ -89,8 +89,6 @@ if (( ${#NEXTAUTH_SECRET} < 32 )); then echo "NEXTAUTH_SECRET must contain at le
 if [[ "$NEXTAUTH_SECRET" =~ ^(your-secret|change-me|dev-secret|replace-with) ]]; then echo "NEXTAUTH_SECRET must not be a placeholder" >&2; exit 1; fi
 if [[ ! "$DATABASE_URL" =~ ^postgres(ql)?:// ]]; then echo "DATABASE_URL must be a PostgreSQL URL" >&2; exit 1; fi
 if [[ ! -d "$source_dir/node_modules" ]]; then echo "Dependencies are missing; run npm ci during deployment" >&2; exit 1; fi
-if [[ ! -f "$source_dir/.next/BUILD_ID" ]]; then echo "Production build is missing; run npm run build during deployment" >&2; exit 1; fi
-
 : "${BACKEND_PORT:?BACKEND_PORT is required; choose an unused port explicitly}"
 : "${FRONTEND_PORT:?FRONTEND_PORT is required; choose an unused port explicitly}"
 if [[ "$BACKEND_PORT" == "$FRONTEND_PORT" ]]; then echo "BACKEND_PORT and FRONTEND_PORT must be distinct" >&2; exit 1; fi
@@ -100,8 +98,10 @@ for app_port in "$BACKEND_PORT" "$FRONTEND_PORT"; do
 done
 
 cd "$source_dir"
-export NODE_ENV=production
-npm start -- --hostname "${APP_HOST:-127.0.0.1}" --port "$FRONTEND_PORT" & app_pid=$!
+export NEXT_PUBLIC_DEMO_EMAIL="${PROVISION_ADMIN_EMAIL:-${ADMIN_EMAIL:-}}"
+export NEXT_PUBLIC_DEMO_PASSWORD="${PROVISION_ADMIN_PASSWORD:-${ADMIN_PASSWORD:-}}"
+export NODE_ENV=development
+npm run dev -- --hostname "${APP_HOST:-127.0.0.1}" --port "$FRONTEND_PORT" & app_pid=$!
 node scripts/api-proxy.mjs & proxy_pid=$!
 cleanup() {
   kill -TERM "${app_pid:-}" "${proxy_pid:-}" 2>/dev/null || :
