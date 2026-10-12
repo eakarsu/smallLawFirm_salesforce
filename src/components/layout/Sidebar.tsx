@@ -23,6 +23,7 @@ import { LogoIcon } from "@/components/ui/logo"
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
+  { name: "AI Operations", href: "/ai-operations", icon: TrendingUp },
   { name: "Clients", href: "/clients", icon: Users },
   { name: "Matters", href: "/matters", icon: Briefcase },
   { name: "Documents", href: "/documents", icon: FileText },
